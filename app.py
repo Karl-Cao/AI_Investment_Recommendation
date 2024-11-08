@@ -1,34 +1,52 @@
-import streamlit as st
-import pandas as pd
+import os
 import json
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 
 # Load data
 @st.cache_data
-def load_data(file_path):
-    with open(file_path, 'r') as f:
+def load_data():
+    # Load consolidated analysis JSON
+    consolidated_file = os.path.join("data", "consolidated_company_analysis.json")
+    with open(consolidated_file, 'r') as f:
         data = json.load(f)
     return data
 
-# Main function to run the Streamlit app
+@st.cache_data
+def load_sp500_data():
+    # Load S&P 500 data
+    sp500_file = os.path.join("data", "S&P500_standardized.csv")
+    sp500_df = pd.read_csv(sp500_file)
+    return sp500_df
+
+def normalize_company_name(name):
+    """Normalize company name for consistent matching."""
+    if pd.isna(name):
+        return ""
+    name = name.replace('.', '').replace(',', '').strip().lower()
+    return name
+
 def main():
     st.title("Investment Analysis Dashboard")
 
     # Load data
-    data = load_data("./investment_analysis_results_claude3_20241019_031757.json")
+    data = load_data()
+    sp500_df = load_sp500_data()
+    sp500_companies = set(sp500_df['name'].apply(normalize_company_name))
 
     # Sidebar for navigation
-    page = st.sidebar.selectbox("Choose a page", ["Overview", "Company Analysis", "Sector Analysis", "Trends"])
+    page = st.sidebar.selectbox("Choose a page", ["Overview", "Company Analysis", "Sector Trends", "Suggest a Company"])
 
     if page == "Overview":
         show_overview(data)
     elif page == "Company Analysis":
-        show_company_analysis(data)
-    elif page == "Sector Analysis":
-        show_sector_analysis(data)
-    elif page == "Trends":
+        show_company_analysis(data, sp500_companies)
+    elif page == "Sector Trends":
         show_trends(data)
+    elif page == "Suggest a Company":
+        suggest_company()
 
 def show_overview(data):
     st.header("Investment Analysis Overview")
@@ -50,7 +68,7 @@ def show_overview(data):
 
     # Top 10 companies by ultimate strength
     st.subheader("Top 10 Companies by Ultimate Strength")
-    top_10 = df.nlargest(10, 'ultimate_strength')[['company', 'ultimate_strength', 'recommendation']]
+    top_10 = df.nlargest(50, 'ultimate_strength')[['company', 'ultimate_strength', 'recommendation']]
     st.table(top_10)
 
 def search_companies(search_term, companies):
@@ -58,58 +76,84 @@ def search_companies(search_term, companies):
 
 def display_company_info(company_data, company_name):
     st.subheader(f"{company_name} Analysis")
-    st.write(f"Recommendation: {company_data['recommendation']}")
-    st.write(f"Ultimate Strength: {company_data['ultimate_strength']}")
+    
+    # Access keys with safeguards
+    recommendation = company_data.get('recommendation', 'N/A')
+    ultimate_strength = company_data.get('ultimate_strength', 'N/A')
+    industry = company_data.get('industry', 'N/A')
+    market_cap = company_data.get('market_cap', 'N/A')
+    country = company_data.get('country', 'N/A')
+    website = company_data.get('website', 'N/A')
+    
+    # Display company info
+    st.write(f"Recommendation: {recommendation}")
+    st.write(f"Ultimate Strength: {ultimate_strength}")
+    st.write(f"Industry: {industry}")
+    st.write(f"Market Cap: {market_cap}")
+    st.write(f"Country: {country}")
+    if website != 'N/A':
+        st.write(f"Website: [Link]({website})")
+    else:
+        st.write(f"Website: {website}")
 
-    # Create a radar chart for the scores
-    categories = list(company_data['scores'].keys())
-    values = list(company_data['scores'].values())
+    # Debugging output: Print keys of company_data to identify missing fields
+    st.write("Debug Info: Available Keys in company_data")
+    st.write(list(company_data.keys()))
 
-    fig = go.Figure(data=go.Scatterpolar(
-      r=values,
-      theta=categories,
-      fill='toself'
-    ))
+    # Create a radar chart for the scores if they exist
+    if 'scores' in company_data:
+        categories = list(company_data['scores'].keys())
+        values = list(company_data['scores'].values())
 
-    fig.update_layout(
-      polar=dict(
-        radialaxis=dict(
-          visible=True,
-          range=[0, 10]
-        )),
-      showlegend=False
-    )
+        fig = go.Figure(data=go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill='toself'
+        ))
 
-    st.plotly_chart(fig)
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 10]
+                )),
+            showlegend=False
+        )
 
+        st.plotly_chart(fig)
+
+    # Explanation if it exists
+    explanation = company_data.get('explanation', 'N/A')
     st.subheader("Explanation")
-    st.write(company_data['explanation'])
+    st.write(explanation)
 
-def show_company_analysis(data):
+
+def show_company_analysis(data, sp500_companies):
     st.header("Company Analysis")
 
     companies = list(data['company_analysis'].keys())
 
-    # Add a search bar
-    search_term = st.text_input("Search for a company", "")
+    # Add search and filter options
+    search_term = st.text_input("Search for a company or symbol", "").lower()
+    filter_sp500 = st.checkbox("Show only S&P 500 companies")
 
-    if search_term:
-        search_results = search_companies(search_term, companies)
-        if search_results:
-            selected_company = st.selectbox("Select a company from search results", search_results)
-            company_data = data['company_analysis'][selected_company]
-            display_company_info(company_data, selected_company)
-        else:
-            st.warning("No companies found matching your search term.")
-    else:
-        # If no search term, show the dropdown with all companies
-        selected_company = st.selectbox("Or select a company from the list", companies)
+    # Filter companies by S&P 500 membership
+    filtered_companies = [
+        company for company in companies
+        if (not filter_sp500 or normalize_company_name(company) in sp500_companies)
+        and (search_term in company.lower() or any(search_term in symbol.lower() for symbol in data['company_analysis'][company]['symbols'].split(',')))
+    ]
+
+    if filtered_companies:
+        selected_company = st.selectbox("Select a company from the list", filtered_companies)
         company_data = data['company_analysis'][selected_company]
         display_company_info(company_data, selected_company)
+    else:
+        st.warning("No companies found matching your search term.")
 
     # Add a section for company comparison
     st.subheader("Company Comparison")
-    companies_to_compare = st.multiselect("Select companies to compare", companies)
+    companies_to_compare = st.multiselect("Select companies to compare", filtered_companies)
     if len(companies_to_compare) > 1:
         comparison_data = {company: data['company_analysis'][company] for company in companies_to_compare}
         show_company_comparison(comparison_data)
@@ -144,20 +188,31 @@ def show_company_comparison(comparison_data):
 
     st.plotly_chart(fig)
 
-def show_sector_analysis(data):
-    st.header("Sector Analysis")
-
-    # You'll need to add sector information to your data for this to work
-    # For now, we'll just show a placeholder
-    st.write("Sector analysis will be implemented here.")
-
 def show_trends(data):
     st.header("Market Trends")
 
-    # Display the consolidated trends
-    for sector, trend in data['consolidated_trends'].items():
-        st.subheader(sector)
-        st.write(trend)
+    # Get list of sectors
+    sectors = list(data['consolidated_trends'].keys())
+
+    # Search and Filter
+    search_term = st.text_input("Search for a sector", "").lower()
+    filtered_sectors = [sector for sector in sectors if search_term in sector.lower()]
+
+    # Display results
+    if filtered_sectors:
+        for sector in filtered_sectors:
+            st.subheader(sector.capitalize())
+            st.write(data['consolidated_trends'][sector])
+    else:
+        st.warning("No sectors found matching your search term.")
+
+def suggest_company():
+    st.header("Suggest a Company for Analysis")
+    suggested_company = st.text_input("Enter the name or symbol of a company that you think should be analyzed")
+
+    if suggested_company:
+        st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
+        # Here you could add functionality to save this suggestion to a file or database for later processing.
 
 if __name__ == "__main__":
     main()
