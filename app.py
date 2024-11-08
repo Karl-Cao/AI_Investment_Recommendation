@@ -88,10 +88,22 @@ def show_overview(data):
     fig = px.histogram(df, x='ultimate_strength', nbins=20, title="Distribution of Ultimate Strength Scores")
     st.plotly_chart(fig)
 
-    # Top 10 companies by ultimate strength
-    st.subheader("Top 50 Companies by Ultimate Strength")
-    top_10 = df.nlargest(50, 'ultimate_strength')[['company', 'ultimate_strength', 'recommendation']]
-    st.table(top_10)
+    # Display companies grouped by score
+    st.subheader("Companies Grouped by Ultimate Strength Score")
+    unique_scores = df['ultimate_strength'].unique()
+    unique_scores.sort()  # Sort scores to display them in order
+
+    score_selection = st.selectbox("Select a score to view companies", unique_scores[::-1])  # Show highest scores first
+    companies_with_score = df[df['ultimate_strength'] == score_selection][['company', 'ultimate_strength', 'recommendation']]
+    st.table(companies_with_score)
+
+    # Add navigation to proceed to the next top scored companies
+    if st.button("Proceed to Next Group of Companies"):
+        next_score_index = list(unique_scores).index(score_selection) + 1
+        if next_score_index < len(unique_scores):
+            st.query_params(score=unique_scores[next_score_index])
+        else:
+            st.warning("No more groups available.")
 
 def search_companies(search_term, companies):
     return [company for company in companies if search_term.lower() in company.lower()]
