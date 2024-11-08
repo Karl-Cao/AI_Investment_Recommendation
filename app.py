@@ -88,22 +88,17 @@ def show_overview(data):
     fig = px.histogram(df, x='ultimate_strength', nbins=20, title="Distribution of Ultimate Strength Scores")
     st.plotly_chart(fig)
 
-    # Display companies grouped by score
+    # Display companies grouped by score using a multi-select
     st.subheader("Companies Grouped by Ultimate Strength Score")
     unique_scores = df['ultimate_strength'].unique()
     unique_scores.sort()  # Sort scores to display them in order
 
-    score_selection = st.selectbox("Select a score to view companies", unique_scores[::-1])  # Show highest scores first
-    companies_with_score = df[df['ultimate_strength'] == score_selection][['company', 'ultimate_strength', 'recommendation']]
-    st.table(companies_with_score)
+    score_selection = st.multiselect("Select scores to view companies", unique_scores[::-1])  # Show highest scores first
+    if score_selection:
+        companies_with_selected_scores = df[df['ultimate_strength'].isin(score_selection)][['company', 'ultimate_strength', 'recommendation']]
+        companies_with_selected_scores = companies_with_selected_scores.sort_values(by='ultimate_strength', ascending=False)
+        st.table(companies_with_selected_scores)
 
-    # Add navigation to proceed to the next top scored companies
-    if st.button("Proceed to Next Group of Companies"):
-        next_score_index = list(unique_scores).index(score_selection) + 1
-        if next_score_index < len(unique_scores):
-            st.query_params(score=unique_scores[next_score_index])
-        else:
-            st.warning("No more groups available.")
 
 def search_companies(search_term, companies):
     return [company for company in companies if search_term.lower() in company.lower()]
