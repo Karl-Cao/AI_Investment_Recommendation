@@ -12,6 +12,28 @@ def load_data():
     consolidated_file = os.path.join("data", "consolidated_company_analysis.json")
     with open(consolidated_file, 'r') as f:
         data = json.load(f)
+
+    # Load additional company details from CSV
+    combined_file = os.path.join("data", "S&P500_related_tickers_combined.csv")
+    combined_df = pd.read_csv(combined_file)
+
+    # Normalize company names for consistent matching
+    combined_df['normalized_name'] = combined_df['name'].apply(normalize_company_name)
+
+    # Enrich each company in the JSON with details from the CSV
+    for company_name, company_data in data['company_analysis'].items():
+        normalized_name = normalize_company_name(company_name)
+
+        # Find the row in the CSV that matches the company
+        matching_row = combined_df[combined_df['normalized_name'] == normalized_name]
+        if not matching_row.empty:
+            row = matching_row.iloc[0]
+            company_data['industry'] = row.get('industry', 'N/A')
+            company_data['market_cap'] = row.get('market_cap', 'N/A')
+            company_data['country'] = row.get('country', 'N/A')
+            company_data['website'] = row.get('website', 'N/A')
+            company_data['symbols'] = row.get('symbol', 'N/A')
+
     return data
 
 @st.cache_data
@@ -67,7 +89,7 @@ def show_overview(data):
     st.plotly_chart(fig)
 
     # Top 10 companies by ultimate strength
-    st.subheader("Top 10 Companies by Ultimate Strength")
+    st.subheader("Top 50 Companies by Ultimate Strength")
     top_10 = df.nlargest(50, 'ultimate_strength')[['company', 'ultimate_strength', 'recommendation']]
     st.table(top_10)
 
@@ -97,8 +119,8 @@ def display_company_info(company_data, company_name):
         st.write(f"Website: {website}")
 
     # Debugging output: Print keys of company_data to identify missing fields
-    st.write("Debug Info: Available Keys in company_data")
-    st.write(list(company_data.keys()))
+    # st.write("Debug Info: Available Keys in company_data")
+    # st.write(list(company_data.keys()))
 
     # Create a radar chart for the scores if they exist
     if 'scores' in company_data:
