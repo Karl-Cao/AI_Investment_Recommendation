@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import yfinance as yf
 
 # Load data
 @st.cache_data
@@ -66,7 +67,7 @@ def main():
     elif page == "Company Analysis":
         show_company_analysis(data, sp500_companies)
     elif page == "Sector Trends":
-        show_trends(data)
+        show_sector_trends(data)
     elif page == "Suggest a Company":
         suggest_company()
 
@@ -157,6 +158,63 @@ def display_company_info(company_data, company_name):
     st.write(explanation)
 
 
+def display_company_info(company_data, company_name):
+    st.subheader(f"{company_name} Analysis")
+    
+    # Safely access company details
+    recommendation = company_data.get('recommendation', 'N/A')
+    ultimate_strength = company_data.get('ultimate_strength', 'N/A')
+    industry = company_data.get('industry', 'N/A')
+    market_cap = company_data.get('market_cap', 'N/A')
+    country = company_data.get('country', 'N/A')
+    website = company_data.get('website', 'N/A')
+
+    # Display company info
+    st.write(f"Recommendation: {recommendation}")
+    st.write(f"Ultimate Strength: {ultimate_strength}")
+    st.write(f"Industry: {industry}")
+    st.write(f"Market Cap: {market_cap}")
+    st.write(f"Country: {country}")
+    if website != 'N/A':
+        st.write(f"Website: [Link]({website})")
+    else:
+        st.write(f"Website: {website}")
+
+    # Create a radar chart for the scores if they exist
+    if 'scores' in company_data:
+        categories = list(company_data['scores'].keys())
+        values = list(company_data['scores'].values())
+
+        fig = go.Figure(data=go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill='toself'
+        ))
+
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 10]
+                )),
+            showlegend=False
+        )
+
+        st.plotly_chart(fig)
+
+    # Explanation if it exists
+    explanation = company_data.get('explanation', 'N/A')
+    st.subheader("Explanation")
+    st.write(explanation)
+
+    # Stock Price Tracking using Yahoo Finance
+    st.subheader("Stock Price Tracking")
+    symbol = company_data.get('symbols', '').split(',')[0].strip()  # Get the first symbol for tracking
+    if symbol:
+        stock = yf.Ticker(symbol)
+        price_data = stock.history(period='6mo')  # Get data for the last 6 months
+        st.line_chart(price_data['Close'])  # Plot the closing price
+
 def show_company_analysis(data, sp500_companies):
     st.header("Company Analysis")
 
@@ -187,53 +245,22 @@ def show_company_analysis(data, sp500_companies):
         comparison_data = {company: data['company_analysis'][company] for company in companies_to_compare}
         show_company_comparison(comparison_data)
 
-def show_company_comparison(comparison_data):
-    # Create a DataFrame for easy comparison
-    df = pd.DataFrame({company: {**data['scores'], 'Ultimate Strength': data['ultimate_strength']} 
-                       for company, data in comparison_data.items()}).T
 
-    # Display the comparison table
-    st.write(df)
-
-    # Create a radar chart for comparison
-    fig = go.Figure()
-
-    for company in comparison_data.keys():
-        fig.add_trace(go.Scatterpolar(
-            r=list(comparison_data[company]['scores'].values()) + [comparison_data[company]['ultimate_strength']],
-            theta=list(comparison_data[company]['scores'].keys()) + ['Ultimate Strength'],
-            fill='toself',
-            name=company
-        ))
-
-    fig.update_layout(
-      polar=dict(
-        radialaxis=dict(
-          visible=True,
-          range=[0, max(max(company['scores'].values()) for company in comparison_data.values()) + 5]
-        )),
-      showlegend=True
-    )
-
-    st.plotly_chart(fig)
-
-def show_trends(data):
+def show_sector_trends(data):
     st.header("Market Trends")
 
     # Get list of sectors
     sectors = list(data['consolidated_trends'].keys())
 
     # Search and Filter
-    search_term = st.text_input("Search for a sector", "").lower()
-    filtered_sectors = [sector for sector in sectors if search_term in sector.lower()]
+    selected_sector = st.selectbox("Select a sector to view analysis", sectors)
 
-    # Display results
-    if filtered_sectors:
-        for sector in filtered_sectors:
-            st.subheader(sector.capitalize())
-            st.write(data['consolidated_trends'][sector])
-    else:
-        st.warning("No sectors found matching your search term.")
+    # Display selected sector trend
+    if selected_sector:
+        st.subheader(f"{selected_sector.capitalize()} Sector Analysis")
+        st.write(data['consolidated_trends'][selected_sector])
+
+
 
 def suggest_company():
     st.header("Suggest a Company for Analysis")
