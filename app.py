@@ -82,22 +82,25 @@ def main():
     sp500_df = load_sp500_data()
     sp500_companies = set(sp500_df['name'].apply(normalize_company_name))
 
-    # Create horizontal navigation tabs
-    tabs = ["Overview", "Company Analysis", "Sector Trends", "Suggest a Company"]
-    tab1, tab2, tab3, tab4 = st.tabs(tabs)
-    
-    # Set active tab based on session state
-    if st.session_state.active_tab in tabs:
-        tab_index = tabs.index(st.session_state.active_tab)
-        st.session_state.active_tab = tabs[tab_index]  # Ensure valid tab name
-    
-    with tab1:
+    # Custom navigation bar using buttons
+    st.sidebar.title("Navigation")
+    if st.sidebar.button("Overview"):
+        st.session_state.active_tab = "Overview"
+    if st.sidebar.button("Company Analysis"):
+        st.session_state.active_tab = "Company Analysis"
+    if st.sidebar.button("Sector Trends"):
+        st.session_state.active_tab = "Sector Trends"
+    if st.sidebar.button("Suggest a Company"):
+        st.session_state.active_tab = "Suggest a Company"
+
+    # Render content based on active tab
+    if st.session_state.active_tab == "Overview":
         show_overview(data)
-    with tab2:
+    elif st.session_state.active_tab == "Company Analysis":
         show_company_analysis(data, sp500_companies)
-    with tab3:
+    elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
-    with tab4:
+    elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
 def navigate_to_company(company_name):
@@ -159,12 +162,14 @@ def show_company_analysis(data, sp500_companies):
     search_term = st.text_input("Search for a company or symbol", 
                                st.session_state.selected_company if st.session_state.selected_company else "").lower()
     filter_sp500 = st.checkbox("Show only S&P 500 companies")
+    filter_non_sp500 = st.checkbox("Show only companies not in the S&P 500")
 
-    # Filter companies
+    # Filter companies based on checkboxes
     filtered_companies = [
         company for company in companies
-        if (not filter_sp500 or normalize_company_name(company) in sp500_companies)
-        and (search_term in company.lower() or 
+        if ((not filter_sp500 or normalize_company_name(company) in sp500_companies) and
+            (not filter_non_sp500 or normalize_company_name(company) not in sp500_companies)) and
+            (search_term in company.lower() or 
              (data['company_analysis'][company].get('symbols', '') and 
               any(search_term in symbol.lower() for symbol in data['company_analysis'][company]['symbols'].split(','))))
     ]
@@ -183,104 +188,18 @@ def show_company_analysis(data, sp500_companies):
     else:
         st.warning("No companies found matching your search term.")
 
-import pandas as pd
-import yfinance as yf
-
 def display_company_info(company_data, company_name, full_data):
     st.subheader(f"{company_name} Analysis")
 
-    # Get earnings info using yfinance
-    symbol = company_data.get('symbols', '').split(',')[0].strip()
-    earnings_info = {'next': None, 'last': None}
-
-    if symbol:
-        try:
-            stock = yf.Ticker(symbol)
-            
-            # Get earnings information using proper type checking
-            try:
-                # First try to get calendar info for next earnings
-                calendar = stock.calendar
-                if calendar is not None:
-                    if isinstance(calendar, dict):
-                        # Handle dictionary format
-                        if 'Earnings Date' in calendar:
-                            next_earnings = calendar['Earnings Date']
-                            if isinstance(next_earnings, (list, tuple)) and len(next_earnings) > 0:
-                                earnings_info['next'] = pd.Timestamp(next_earnings[0]).strftime('%Y-%m-%d')
-                    else:
-                        # Handle DataFrame format
-                        try:
-                            next_earnings = calendar.loc['Earnings Date', 0]
-                            if pd.notna(next_earnings):
-                                earnings_info['next'] = pd.Timestamp(next_earnings).strftime('%Y-%m-%d')
-                        except:
-                            pass
-
-                # Get historical earnings dates
-                earnings_dates = stock.earnings_dates
-                if earnings_dates is not None:
-                    if isinstance(earnings_dates, pd.DataFrame) and not earnings_dates.empty:
-                        today = pd.Timestamp.now()
-                        past_dates = earnings_dates[earnings_dates.index < today]
-                        if not past_dates.empty:
-                            last_earnings_date = past_dates.index.max()
-                            earnings_info['last'] = pd.Timestamp(last_earnings_date).strftime('%Y-%m-%d')
-                    elif isinstance(earnings_dates, dict):
-                        # Handle dictionary format
-                        dates = sorted([pd.Timestamp(date) for date in earnings_dates.keys()])
-                        if dates:
-                            earnings_info['last'] = dates[-1].strftime('%Y-%m-%d')
-
-                # If we still don't have last earnings, try quarterly earnings
-                if not earnings_info['last']:
-                    quarterly = stock.quarterly_earnings
-                    if quarterly is not None:
-                        if isinstance(quarterly, pd.DataFrame) and not quarterly.empty:
-                            last_date = quarterly.index.max()
-                            earnings_info['last'] = pd.Timestamp(last_date).strftime('%Y-%m-%d')
-                        elif isinstance(quarterly, dict) and quarterly:
-                            dates = sorted([pd.Timestamp(date) for date in quarterly.keys()])
-                            if dates:
-                                earnings_info['last'] = dates[-1].strftime('%Y-%m-%d')
-                        
-            except Exception as e:
-                print(f"Error fetching earnings data for {symbol}: {str(e)}")
-
-        except Exception as e:
-            print(f"Error accessing data for {symbol}: {str(e)}")
-
-    # Display earnings information
-    st.write("---")
-    st.write("**📅 Earnings Information**")
-
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Display next earnings date(s)
-        if earnings_info.get('next'):
-            st.write(f"**Next Earnings:** {earnings_info['next']}")
-        else:
-            st.write("**Next Earnings:** Date not announced")
-
-    with col2:
-        # Display last earnings date
-        if earnings_info.get('last'):
-            st.write(f"**Last Reported:** {earnings_info['last']}")
-        else:
-            st.write("**Last Reported:** No data available")
-
-    # Rest of your display code remains the same...
-    # Company details
+    # Displaying company details and earnings information
     col1, col2 = st.columns(2)
 
     with col1:
         st.write(f"**Recommendation:** {company_data.get('recommendation', 'N/A')}")
         st.write(f"**Ultimate Strength:** {company_data.get('ultimate_strength', 'N/A')}")
         st.write(f"**Industry:** {company_data.get('industry', 'N/A')}")
-
         if company_data.get('industry') != 'N/A':
-            if st.button(f"📈 View {company_data['industry']} Sector Trends"):
+            if st.button(f"📈 View {company_data['industry']} Sector Trends", key=f"view_sector_{company_data['industry']}"):
                 navigate_to_sector(company_data['industry'])
 
     with col2:
@@ -292,43 +211,10 @@ def display_company_info(company_data, company_name, full_data):
         else:
             st.write(f"**Website:** {website}")
 
-    # Radar chart for scores
-    if 'scores' in company_data:
-        categories = list(company_data['scores'].keys())
-        values = list(company_data['scores'].values())
-
-        fig = go.Figure(data=go.Scatterpolar(
-            r=values,
-            theta=categories,
-            fill='toself'
-        ))
-
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 10]
-                )),
-            showlegend=False
-        )
-
-        st.plotly_chart(fig)
-
-    # Explanation
+    # Add explanation section back
     st.subheader("Analysis Explanation")
-    st.write(company_data.get('explanation', 'N/A'))
-
-    # Stock Price Tracking
-    st.subheader("Stock Price Tracking")
-    if symbol:
-        try:
-            price_data = stock.history(period='6mo')
-            if isinstance(price_data, pd.DataFrame) and not price_data.empty:
-                st.line_chart(price_data['Close'])
-            else:
-                st.warning("No price data available for this period")
-        except Exception as e:
-            print(f"Error fetching price data: {str(e)}")
+    explanation = company_data.get('explanation', 'N/A')
+    st.write(explanation)
 
 def show_sector_trends(data):
     st.header("Market Trends")
