@@ -82,27 +82,25 @@ def main():
     sp500_df = load_sp500_data()
     sp500_companies = set(sp500_df['name'].apply(normalize_company_name))
 
-    # Create horizontal navigation tabs
-    tabs = ["Overview", "Company Analysis", "Sector Trends", "Suggest a Company"]
-    tab1, tab2, tab3, tab4 = st.tabs(tabs)
-    
-    # Set active tab based on session state
-    if st.session_state.active_tab in tabs:
-        tab_index = tabs.index(st.session_state.active_tab)
-        st.session_state.active_tab = tabs[tab_index]
+    # Custom navigation bar using buttons
+    st.sidebar.title("Navigation")
+    if st.sidebar.button("Overview"):
+        st.session_state.active_tab = "Overview"
+    if st.sidebar.button("Company Analysis"):
+        st.session_state.active_tab = "Company Analysis"
+    if st.sidebar.button("Sector Trends"):
+        st.session_state.active_tab = "Sector Trends"
+    if st.sidebar.button("Suggest a Company"):
+        st.session_state.active_tab = "Suggest a Company"
 
     # Render content based on active tab
-    with tab1:
-        st.session_state.active_tab = "Overview"
+    if st.session_state.active_tab == "Overview":
         show_overview(data)
-    with tab2:
-        st.session_state.active_tab = "Company Analysis"
+    elif st.session_state.active_tab == "Company Analysis":
         show_company_analysis(data, sp500_companies)
-    with tab3:
-        st.session_state.active_tab = "Sector Trends"
+    elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
-    with tab4:
-        st.session_state.active_tab = "Suggest a Company"
+    elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
 def navigate_to_company(company_name):
