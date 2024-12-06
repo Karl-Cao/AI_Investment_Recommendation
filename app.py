@@ -116,10 +116,71 @@ def add_chatbot_interface(data):
     # Initialize chatbot
     chatbot = InvestmentChatbot()
     
+    # Create a mapping of symbols to company names from your data
+    symbol_to_company = {}
+    for company_name, details in data['company_analysis'].items():
+        if 'symbols' in details:
+            for symbol in details['symbols'].split(','):
+                symbol_to_company[symbol.strip()] = company_name
+    
+    # Function to create company links and buttons
+    def add_company_links(text):
+        import re
+        # Pattern to match stock symbols in parentheses: (XXXX)
+        pattern = r'\(([A-Z]{1,5})\)'
+        
+        def replace_with_links(match):
+            symbol = match.group(1)
+            company_name = symbol_to_company.get(symbol)
+            
+            # Create columns for the buttons
+            col1, col2 = st.columns(2)
+            
+            # Internal company analysis link
+            if company_name:
+                with col1:
+                    if st.button(f"📊 View {company_name} Analysis", key=f"company_{symbol}"):
+                        navigate_to_company(company_name)
+            
+            # External Yahoo Finance link
+            with col2:
+                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
+                    st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+            
+            return f"**{symbol}**"  # Keep the symbol visible in the text
+    
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                # First display the text with bold symbols
+                content = message["content"]
+                if isinstance(content, list):
+                    content = ' '.join(str(item) for item in content)
+                
+                # Add links and buttons for stock symbols
+                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', content)
+                st.markdown(linked_content)
+                
+                # Then add the buttons for each symbol
+                symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
+                if symbols:
+                    st.write("Quick Links:")
+                    for symbol in symbols:
+                        company_name = symbol_to_company.get(symbol)
+                        col1, col2 = st.columns(2)
+                        
+                        if company_name:
+                            with col1:
+                                if st.button(f"📊 View {company_name} Analysis", key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
+                                    navigate_to_company(company_name)
+                        
+                        with col2:
+                            if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
+                                st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+                        
+            else:
+                st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Ask about investment opportunities..."):
@@ -134,55 +195,48 @@ def add_chatbot_interface(data):
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
             
-            # Step 1: Display the raw response for debugging
-            st.write("### Raw Response from Chatbot")
-            st.write(response)
-            
-            # Step 2: Handle and parse the response if it's a list
+            # Handle response formatting
             if isinstance(response, list):
-                st.write("The response is a list. Extracting text...")
                 response_parts = []
                 for item in response:
-                    # Print raw item for debugging purposes
-                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
-                    
-                    # Extract the 'text' attribute if it exists
                     if hasattr(item, 'text'):
                         response_parts.append(item.text)
+                    elif isinstance(item, dict) and 'text' in item:
+                        response_parts.append(item['text'])
                     else:
-                        response_parts.append(str(item))  # Fallback to converting to string
-                
-                # Join parts into a single response string
+                        response_parts.append(str(item))
                 response = ' '.join(response_parts)
+            elif hasattr(response, 'text'):
+                response = response.text
+            elif isinstance(response, dict) and 'text' in response:
+                response = response['text']
             
-            # Step 3: Display the fully parsed response
-            st.write("### Parsed Response")
-            st.write(response)
+            # Display formatted response with links
+            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
+            st.markdown(linked_response)
             
-            # Parse the response into sections and display formatted version
-            sections = response.split('\n\n')
+            # Add buttons for each symbol in the response
+            symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
+            if symbols:
+                st.write("Quick Links:")
+                for symbol in symbols:
+                    company_name = symbol_to_company.get(symbol)
+                    col1, col2 = st.columns(2)
+                    
+                    if company_name:
+                        with col1:
+                            if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
+                                navigate_to_company(company_name)
+                    
+                    with col2:
+                        if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"resp_yahoo_{symbol}"):
+                            st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
             
-            for section in sections:
-                if ':' in section and section.split(':')[0].isupper():
-                    # It's a header section
-                    header, content = section.split(':', 1)
-                    st.subheader(header.strip())
-                    st.write(content.strip())
-                else:
-                    # Regular text
-                    if '- ' in section:
-                        points = section.split('- ')
-                        for point in points[1:]:  # Skip first empty split
-                            st.markdown(f"• {point.strip()}")
-                    else:
-                        st.write(section.strip())
-
             # Add a divider for clarity
             st.divider()
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
-
 
 
 
