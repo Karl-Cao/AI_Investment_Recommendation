@@ -82,16 +82,15 @@ class InvestmentChatbot:
 
     def extract_response_content(self, response):
         """Extract the text content from the response object"""
-        # If response is a list of TextBlock-like objects
+        # If response is a list
         if isinstance(response, list):
             response_parts = []
             for item in response:
-                # Extract the 'text' attribute if available
-                if hasattr(item, 'text'):
-                    response_parts.append(item.text)
-                else:
-                    response_parts.append(str(item))  # Fallback if no 'text' attribute
-                
+                # Assuming the response is in the format: TextBlock(text="...", type='text')
+                match = re.search(r'text="(.*?)"', item, re.DOTALL)
+                if match:
+                    response_parts.append(match.group(1))
+
             # Join all parts to form the full response
             return ' '.join(response_parts)
 
@@ -171,6 +170,7 @@ def add_chatbot_interface(data):
     if st.button("Clear Conversation"):
         st.session_state.messages = []
         st.rerun()
+
 
 
 # Load data
