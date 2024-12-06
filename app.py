@@ -47,21 +47,16 @@ class InvestmentChatbot:
     def get_response(self, query, data):
         context = self.prepare_context(data, query)
         
-        messages = [
-            {
-                "role": "system",
-                "content": f"{self.system_prompt}\n\nRelevant Data:\n{context}"
-            },
-            {
-                "role": "user",
-                "content": query
-            }
-        ]
-        
         response = anthropic.messages.create(
-            model="claude-3-5-sonnet-latest",
+            model="claude-3-sonnet-latest",
+            system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
             max_tokens=1024,
-            messages=messages
+            messages=[
+                {
+                    "role": "user",
+                    "content": query
+                }
+            ]
         )
         
         return response.content
