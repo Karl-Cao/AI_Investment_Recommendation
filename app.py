@@ -109,28 +109,69 @@ def add_chatbot_interface(data):
     # Initialize chatbot
     chatbot = InvestmentChatbot()
     
-    # Function to add links to stock symbols
-    def add_stock_links(text):
+    # Create a mapping of symbols to company names from your data
+    symbol_to_company = {}
+    for company_name, details in data['company_analysis'].items():
+        if 'symbols' in details:
+            for symbol in details['symbols'].split(','):
+                symbol_to_company[symbol.strip()] = company_name
+    
+    # Function to create company links and buttons
+    def add_company_links(text):
         import re
         # Pattern to match stock symbols in parentheses: (XXXX)
         pattern = r'\(([A-Z]{1,5})\)'
         
-        def replace_with_link(match):
+        def replace_with_links(match):
             symbol = match.group(1)
-            # Create a button that will trigger navigation
-            return f" [{symbol}](https://finance.yahoo.com/quote/{symbol}) "
+            company_name = symbol_to_company.get(symbol)
             
-        # Replace all stock symbols with links
-        linked_text = re.sub(pattern, replace_with_link, text)
-        return linked_text
+            # Create columns for the buttons
+            col1, col2 = st.columns(2)
+            
+            # Internal company analysis link
+            if company_name:
+                with col1:
+                    if st.button(f"📊 View {company_name} Analysis", key=f"company_{symbol}"):
+                        navigate_to_company(company_name)
+            
+            # External Yahoo Finance link
+            with col2:
+                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
+                    st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+            
+            return f"**{symbol}**"  # Keep the symbol visible in the text
     
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
-                # Add links to stock symbols in assistant responses
-                linked_content = add_stock_links(message["content"])
-                st.markdown(linked_content, unsafe_allow_html=True)
+                # First display the text with bold symbols
+                content = message["content"]
+                if isinstance(content, list):
+                    content = ' '.join(str(item) for item in content)
+                
+                # Add links and buttons for stock symbols
+                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', content)
+                st.markdown(linked_content)
+                
+                # Then add the buttons for each symbol
+                symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
+                if symbols:
+                    st.write("Quick Links:")
+                    for symbol in symbols:
+                        company_name = symbol_to_company.get(symbol)
+                        col1, col2 = st.columns(2)
+                        
+                        if company_name:
+                            with col1:
+                                if st.button(f"📊 View {company_name} Analysis", key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
+                                    navigate_to_company(company_name)
+                        
+                        with col2:
+                            if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
+                                st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+                        
             else:
                 st.markdown(message["content"])
     
@@ -162,36 +203,33 @@ def add_chatbot_interface(data):
                 response = response.text
             elif isinstance(response, dict) and 'text' in response:
                 response = response['text']
-                
-            # Add links to stock symbols
-            linked_response = add_stock_links(response)
             
-            # Parse the response into sections
-            sections = linked_response.split('\n\n')
+            # Display formatted response with links
+            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
+            st.markdown(linked_response)
             
-            for section in sections:
-                if ':' in section and section.split(':')[0].isupper():
-                    # It's a header section
-                    header, content = section.split(':', 1)
-                    st.subheader(header.strip())
-                    st.markdown(content.strip(), unsafe_allow_html=True)
-                else:
-                    # Regular text
-                    if '- ' in section:
-                        points = section.split('- ')
-                        for point in points[1:]:  # Skip first empty split
-                            st.markdown(f"• {point.strip()}", unsafe_allow_html=True)
-                    else:
-                        st.markdown(section.strip(), unsafe_allow_html=True)
-
+            # Add buttons for each symbol in the response
+            symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
+            if symbols:
+                st.write("Quick Links:")
+                for symbol in symbols:
+                    company_name = symbol_to_company.get(symbol)
+                    col1, col2 = st.columns(2)
+                    
+                    if company_name:
+                        with col1:
+                            if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
+                                navigate_to_company(company_name)
+                    
+                    with col2:
+                        if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"resp_yahoo_{symbol}"):
+                            st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+            
             # Add a divider for clarity
             st.divider()
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
-
-
-
 
 @st.cache_data
 def load_sp500_data():
