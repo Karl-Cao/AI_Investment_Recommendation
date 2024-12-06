@@ -259,49 +259,6 @@ def format_market_cap(value):
     except (ValueError, TypeError):
         return "N/A"
 
-def main():
-    st.set_page_config(layout="wide")  # Use wide layout for better space utilization
-    
-    # Initialize session state for navigation
-    if 'selected_company' not in st.session_state:
-        st.session_state.selected_company = None
-    if 'selected_sector' not in st.session_state:
-        st.session_state.selected_sector = None
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = "Overview"
-
-    st.title("Investment Analysis Dashboard")
-
-    # Load data
-    data = load_data()
-    sp500_df = load_sp500_data()
-    sp500_companies = set(sp500_df['name'].apply(normalize_company_name))
-
-    # Custom navigation bar using buttons
-    st.sidebar.title("Navigation")
-    if st.sidebar.button("Overview"):
-        st.session_state.active_tab = "Overview"
-    if st.sidebar.button("Company Analysis"):
-        st.session_state.active_tab = "Company Analysis"
-    if st.sidebar.button("Sector Trends"):
-        st.session_state.active_tab = "Sector Trends"
-    if st.sidebar.button("Chat"):  # New chat button
-        st.session_state.active_tab = "Chat"
-    if st.sidebar.button("Suggest a Company"):
-        st.session_state.active_tab = "Suggest a Company"
-
-    # Render content based on active tab
-    if st.session_state.active_tab == "Overview":
-        show_overview(data)
-    elif st.session_state.active_tab == "Company Analysis":
-        show_company_analysis(data, sp500_companies)
-    elif st.session_state.active_tab == "Sector Trends":
-        show_sector_trends(data)
-    elif st.session_state.active_tab == "Chat":  # New chat tab
-        add_chatbot_interface(data)
-    elif st.session_state.active_tab == "Suggest a Company":
-        suggest_company()
-
 def navigate_to_company(company_name):
     st.session_state.selected_company = company_name
     st.session_state.active_tab = "Company Analysis"
@@ -568,5 +525,122 @@ def suggest_company():
     if suggested_company:
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
+def main():
+    st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
+    
+    # Initialize session states
+    if 'selected_company' not in st.session_state:
+        st.session_state.selected_company = None
+    if 'selected_sector' not in st.session_state:
+        st.session_state.selected_sector = None
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = "Chat"  # Set Chat as default
+    if 'first_visit' not in st.session_state:
+        st.session_state.first_visit = True
+
+    # Load data
+    data = load_data()
+    sp500_df = load_sp500_data()
+    sp500_companies = set(sp500_df['name'].apply(normalize_company_name))
+
+    # Sidebar navigation
+    st.sidebar.title("Navigation")
+    nav_options = {
+        "Chat": "💬 AI Investment Assistant",
+        "Overview": "📊 Market Overview",
+        "Company Analysis": "🏢 Company Analysis",
+        "Sector Trends": "📈 Sector Trends",
+        "Suggest a Company": "💡 Suggest a Company"
+    }
+    
+    for key, label in nav_options.items():
+        if st.sidebar.button(label, key=f"nav_{key}"):
+            st.session_state.active_tab = key
+
+    # Add sidebar info about the assistant
+    with st.sidebar.expander("ℹ️ About this AI Assistant"):
+        st.write("""
+        This AI Investment Assistant helps you:
+        - Analyze companies and their financials
+        - Compare investment opportunities
+        - Track market trends and sectors
+        - Get real-time stock insights
+        
+        Simply ask questions in natural language!
+        """)
+
+    # Render content based on active tab
+    if st.session_state.active_tab == "Chat":
+        # Welcome message for first-time visitors
+        if st.session_state.first_visit:
+            st.snow()  # Add a fun welcome effect
+            col1, col2, col3 = st.columns([1,2,1])
+            with col2:
+                st.success("""
+                👋 Welcome to your AI Investment Assistant!
+                
+                I can help you with:
+                - Company analysis and recommendations
+                - Market trends and insights
+                - Investment strategies
+                - Stock comparisons
+                
+                Try asking me questions like:
+                - "What are some promising tech companies to invest in?"
+                - "Compare Apple and Microsoft's performance"
+                - "What are the trends in the healthcare sector?"
+                
+                Just type your question below to get started!
+                """)
+            st.session_state.first_visit = False
+            
+        add_chatbot_interface(data)
+        
+        # Add helpful examples at the bottom
+        with st.expander("🎯 Example Questions"):
+            st.write("""
+            Here are some questions you can ask:
+            
+            **Company Analysis**
+            - "What are the top performing companies in the tech sector?"
+            - "Tell me about companies with strong growth potential"
+            - "Which companies have the highest ultimate strength scores?"
+            
+            **Market Research**
+            - "What are the current trends in renewable energy?"
+            - "How is the banking sector performing?"
+            - "Which sectors show the most promise for 2024?"
+            
+            **Investment Strategy**
+            - "What are some low-risk investment options?"
+            - "Show me companies with strong dividends"
+            - "Compare the performance of major EV manufacturers"
+            """)
+            
+    elif st.session_state.active_tab == "Overview":
+        show_overview(data)
+    elif st.session_state.active_tab == "Company Analysis":
+        show_company_analysis(data, sp500_companies)
+    elif st.session_state.active_tab == "Sector Trends":
+        show_sector_trends(data)
+    elif st.session_state.active_tab == "Suggest a Company":
+        suggest_company()
+
+    # Add footer with additional resources
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**📚 Resources**")
+        st.markdown("- [Investment Basics]()")
+        st.markdown("- [Market Analysis Guide]()")
+    with col2:
+        st.markdown("**🔗 Quick Links**")
+        st.markdown("- [Top Companies]()")
+        st.markdown("- [Sector Overview]()")
+    with col3:
+        st.markdown("**💡 Tips**")
+        st.markdown("- Ask specific questions")
+        st.markdown("- Compare multiple companies")
+        
 if __name__ == "__main__":
     main()
