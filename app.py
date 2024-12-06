@@ -22,6 +22,7 @@ class InvestmentChatbot:
         
         Use this data to provide informed responses about investment opportunities and market trends.
         Always explain your reasoning and cite specific metrics when making recommendations.
+        Remember previous context in the conversation to provide more relevant and personalized responses.
         """
         
     def prepare_context(self, data, query):
@@ -45,28 +46,135 @@ class InvestmentChatbot:
                 
         return "\n".join(context)
 
-    def get_response(self, query, data):
+    def get_response(self, query, data, conversation_history):
+        """Get response while maintaining conversation context"""
         context = self.prepare_context(data, query)
         
-        response = anthropic.messages.create(
-            model="claude-3-5-sonnet-latest",
-            system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
-            max_tokens=1024,
-            messages=[
-                {
-                    "role": "user",
-                    "content": query
-                }
-            ]
-        )
+        # Prepare messages array with conversation history
+        messages = []
         
-        # Assuming response content could be in a list, handle that here
-        if isinstance(response, list):
-            response = ' '.join(response)
-        elif hasattr(response, 'content'):
-            response = response.content
+        # Add previous conversation context (limited to last 10 messages to manage token usage)
+        for msg in conversation_history[-10:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
         
-        return response
+        # Add current query
+        messages.append({
+            "role": "user",
+            "content": query
+        })
+        
+        try:
+            response = anthropic.messages.create(
+                model="claude-3-5-sonnet-latest",
+                system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
+                max_tokens=1024,
+                messages=messages
+            )
+            
+            return response.content
+            
+        except Exception as e:
+            st.error(f"Error getting response: {str(e)}")
+            return "I apologize, but I encountered an error. Could you please rephrase your question?"
+
+def add_chatbot_interface(data):
+    st.title("Investment Analysis Chatbot")
+    
+    # Initialize session state for chat history if not exists
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    
+    # Initialize chatbot
+    chatbot = InvestmentChatbot()
+    
+    # Create a mapping of symbols to company names from your data
+    symbol_to_company = {}
+    for company_name, details in data['company_analysis'].items():
+        if 'symbols' in details:
+            for symbol in details['symbols'].split(','):
+                symbol_to_company[symbol.strip()] = company_name
+    
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            if message["role"] == "assistant":
+                # First display the text with bold symbols
+                content = message["content"]
+                if isinstance(content, list):
+                    content = ' '.join(str(item) for item in content)
+                
+                # Add links and buttons for stock symbols
+                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', content)
+                st.markdown(linked_content)
+                
+                # Add buttons for each symbol
+                symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
+                if symbols:
+                    st.write("Quick Links:")
+                    for symbol in symbols:
+                        company_name = symbol_to_company.get(symbol)
+                        col1, col2 = st.columns(2)
+                        
+                        if company_name:
+                            with col1:
+                                if st.button(f"📊 View {company_name} Analysis", 
+                                           key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
+                                    navigate_to_company(company_name)
+                        
+                        with col2:
+                            if st.button(f"🔗 Yahoo Finance ({symbol})", 
+                                       key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
+                                st.markdown(f'<script>window.open("https://finance.yahoo.com/quote/{symbol}", "_blank");</script>', 
+                                          unsafe_allow_html=True)
+            else:
+                st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask about investment opportunities..."):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Get and display assistant response
+        with st.chat_message("assistant"):
+            # Pass the entire conversation history to get_response
+            response = chatbot.get_response(prompt, data, st.session_state.messages)
+            
+            # Display formatted response with links
+            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
+            st.markdown(linked_response)
+            
+            # Add buttons for each symbol in the response
+            symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
+            if symbols:
+                st.write("Quick Links:")
+                for symbol in symbols:
+                    company_name = symbol_to_company.get(symbol)
+                    col1, col2 = st.columns(2)
+                    
+                    if company_name:
+                        with col1:
+                            if st.button(f"📊 View {company_name} Analysis", 
+                                       key=f"resp_company_{symbol}"):
+                                navigate_to_company(company_name)
+                    
+                    with col2:
+                        if st.button(f"🔗 Yahoo Finance ({symbol})", 
+                                   key=f"resp_yahoo_{symbol}"):
+                            st.markdown(f'<script>window.open("https://finance.yahoo.com/quote/{symbol}", "_blank");</script>', 
+                                      unsafe_allow_html=True)
+            
+            # Add a divider for clarity
+            st.divider()
+            
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
 
 # Load data
@@ -99,138 +207,6 @@ def load_data():
             company_data['symbols'] = row.get('symbol', 'N/A')
 
     return data
-
-def add_chatbot_interface(data):
-    st.title("Investment Analysis Chatbot")
-    
-    # Initialize session state for chat history
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
-    
-    # Initialize chatbot
-    chatbot = InvestmentChatbot()
-    
-    # Create a mapping of symbols to company names from your data
-    symbol_to_company = {}
-    for company_name, details in data['company_analysis'].items():
-        if 'symbols' in details:
-            for symbol in details['symbols'].split(','):
-                symbol_to_company[symbol.strip()] = company_name
-    
-    # Function to create company links and buttons
-    def add_company_links(text):
-        import re
-        # Pattern to match stock symbols in parentheses: (XXXX)
-        pattern = r'\(([A-Z]{1,5})\)'
-        
-        def replace_with_links(match):
-            symbol = match.group(1)
-            company_name = symbol_to_company.get(symbol)
-            
-            # Create columns for the buttons
-            col1, col2 = st.columns(2)
-            
-            # Internal company analysis link
-            if company_name:
-                with col1:
-                    if st.button(f"📊 View {company_name} Analysis", key=f"company_{symbol}"):
-                        navigate_to_company(company_name)
-            
-            # External Yahoo Finance link
-            with col2:
-                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
-                    st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
-            
-            return f"**{symbol}**"  # Keep the symbol visible in the text
-    
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            if message["role"] == "assistant":
-                # First display the text with bold symbols
-                content = message["content"]
-                if isinstance(content, list):
-                    content = ' '.join(str(item) for item in content)
-                
-                # Add links and buttons for stock symbols
-                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', content)
-                st.markdown(linked_content)
-                
-                # Then add the buttons for each symbol
-                symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
-                if symbols:
-                    st.write("Quick Links:")
-                    for symbol in symbols:
-                        company_name = symbol_to_company.get(symbol)
-                        col1, col2 = st.columns(2)
-                        
-                        if company_name:
-                            with col1:
-                                if st.button(f"📊 View {company_name} Analysis", key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
-                                    navigate_to_company(company_name)
-                        
-                        with col2:
-                            if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
-                                st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
-                        
-            else:
-                st.markdown(message["content"])
-    
-    # Chat input
-    if prompt := st.chat_input("Ask about investment opportunities..."):
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Get and display assistant response
-        with st.chat_message("assistant"):
-            response = chatbot.get_response(prompt, data)
-            
-            # Handle response formatting
-            if isinstance(response, list):
-                response_parts = []
-                for item in response:
-                    if hasattr(item, 'text'):
-                        response_parts.append(item.text)
-                    elif isinstance(item, dict) and 'text' in item:
-                        response_parts.append(item['text'])
-                    else:
-                        response_parts.append(str(item))
-                response = ' '.join(response_parts)
-            elif hasattr(response, 'text'):
-                response = response.text
-            elif isinstance(response, dict) and 'text' in response:
-                response = response['text']
-            
-            # Display formatted response with links
-            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
-            st.markdown(linked_response)
-            
-            # Add buttons for each symbol in the response
-            symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
-            if symbols:
-                st.write("Quick Links:")
-                for symbol in symbols:
-                    company_name = symbol_to_company.get(symbol)
-                    col1, col2 = st.columns(2)
-                    
-                    if company_name:
-                        with col1:
-                            if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
-                                navigate_to_company(company_name)
-                    
-                    with col2:
-                        if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"resp_yahoo_{symbol}"):
-                            st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
-            
-            # Add a divider for clarity
-            st.divider()
-            
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
 
 @st.cache_data
 def load_sp500_data():
@@ -641,6 +617,6 @@ def main():
         st.markdown("**💡 Tips**")
         st.markdown("- Ask specific questions")
         st.markdown("- Compare multiple companies")
-        
+
 if __name__ == "__main__":
     main()
