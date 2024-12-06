@@ -131,11 +131,11 @@ def add_chatbot_interface(data):
             if isinstance(response, list):
                 response_parts = []
                 for item in response:
-                    # Assuming the text content is in the `content` attribute of each TextBlock
-                    if hasattr(item, 'content'):
-                        response_parts.append(item.content)
+                    # Extract the 'text' attribute from the TextBlock object
+                    if hasattr(item, 'text'):
+                        response_parts.append(item.text)
                     else:
-                        response_parts.append(str(item))  # Convert to string if no `content` attribute
+                        response_parts.append(str(item))  # Fallback to converting to string
                 
                 response = ' '.join(response_parts)
             
@@ -166,6 +166,7 @@ def add_chatbot_interface(data):
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 @st.cache_data
