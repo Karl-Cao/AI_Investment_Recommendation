@@ -109,41 +109,27 @@ def add_chatbot_interface(data):
     # Initialize chatbot
     chatbot = InvestmentChatbot()
     
-    # Create a set of company names for faster lookup
-    company_names = set(data['company_analysis'].keys())
-    
-    # Function to add links to company mentions
-    def add_company_links(text):
-        words = text.split()
-        linked_words = []
-        i = 0
-        while i < len(words):
-            # Check for two-word company names first
-            two_word_company = None
-            if i < len(words) - 1:
-                possible_company = f"{words[i]} {words[i+1]}"
-                if possible_company in company_names:
-                    two_word_company = possible_company
-            
-            # Check if current word or two-word combination is a company
-            if two_word_company:
-                linked_words.append(f"[{two_word_company}](/company/{two_word_company})")
-                i += 2
-            elif words[i] in company_names:
-                linked_words.append(f"[{words[i]}](/company/{words[i]})")
-                i += 1
-            else:
-                linked_words.append(words[i])
-                i += 1
+    # Function to add links to stock symbols
+    def add_stock_links(text):
+        import re
+        # Pattern to match stock symbols in parentheses: (XXXX)
+        pattern = r'\(([A-Z]{1,5})\)'
         
-        return ' '.join(linked_words)
+        def replace_with_link(match):
+            symbol = match.group(1)
+            # Create a button that will trigger navigation
+            return f" [{symbol}](https://finance.yahoo.com/quote/{symbol}) "
+            
+        # Replace all stock symbols with links
+        linked_text = re.sub(pattern, replace_with_link, text)
+        return linked_text
     
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
-                # Add links to company mentions in assistant responses
-                linked_content = add_company_links(message["content"])
+                # Add links to stock symbols in assistant responses
+                linked_content = add_stock_links(message["content"])
                 st.markdown(linked_content, unsafe_allow_html=True)
             else:
                 st.markdown(message["content"])
@@ -167,14 +153,20 @@ def add_chatbot_interface(data):
                 for item in response:
                     if hasattr(item, 'text'):
                         response_parts.append(item.text)
+                    elif isinstance(item, dict) and 'text' in item:
+                        response_parts.append(item['text'])
                     else:
                         response_parts.append(str(item))
                 response = ' '.join(response_parts)
+            elif hasattr(response, 'text'):
+                response = response.text
+            elif isinstance(response, dict) and 'text' in response:
+                response = response['text']
+                
+            # Add links to stock symbols
+            linked_response = add_stock_links(response)
             
-            # Add links to company mentions
-            linked_response = add_company_links(response)
-            
-            # Parse the response into sections and display formatted version
+            # Parse the response into sections
             sections = linked_response.split('\n\n')
             
             for section in sections:
@@ -197,18 +189,6 @@ def add_chatbot_interface(data):
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
-
-    # Handle company link clicks
-    def handle_company_click():
-        # Get the clicked company from the URL
-        company = st.experimental_get_query_params().get('company', [None])[0]
-        if company:
-            navigate_to_company(company)
-            # Clear the URL parameter
-            st.experimental_set_query_params()
-    
-    # Call the handler
-    handle_company_click()
 
 
 
