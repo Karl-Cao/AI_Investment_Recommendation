@@ -223,15 +223,19 @@ def add_chatbot_interface(data):
                 for symbol in symbols:
                     company_name = symbol_to_company.get(symbol)
                     col1, col2 = st.columns(2)
-                    
+
+                    # Button for internal company analysis link
                     if company_name:
                         with col1:
                             if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
                                 navigate_to_company(company_name)
-                    
+
+                    # Link for Yahoo Finance - avoid JavaScript
                     with col2:
-                        if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"resp_yahoo_{symbol}"):
-                            st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
+                        # Create a clickable markdown link instead of using JavaScript
+                        yahoo_link = f"https://finance.yahoo.com/quote/{symbol}"
+                        st.markdown(f"[🔗 Yahoo Finance ({symbol})]({yahoo_link})", unsafe_allow_html=True)
+
             
             # Add a divider for clarity
             st.divider()
