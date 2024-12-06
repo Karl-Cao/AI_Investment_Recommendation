@@ -145,7 +145,8 @@ def add_chatbot_interface(data):
             # External Yahoo Finance link
             with col2:
                 if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
-                    st.markdown(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+                    st.write(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+
             
             return f"**{symbol}**"  # Keep the symbol visible in the text
     
