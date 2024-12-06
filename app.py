@@ -138,6 +138,23 @@ def add_chatbot_interface(data):
             st.write("### Raw Response from Chatbot")
             st.write(response)
             
+            # Step 2: Handle and parse the response if it's a list
+            if isinstance(response, list):
+                st.write("The response is a list. Extracting text...")
+                response_parts = []
+                for item in response:
+                    # Print raw item for debugging purposes
+                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
+                    
+                    # Extract the 'text' attribute if it exists
+                    if hasattr(item, 'text'):
+                        response_parts.append(item.text)
+                    else:
+                        response_parts.append(str(item))  # Fallback to converting to string
+                
+                # Join parts into a single response string
+                response = ' '.join(response_parts)
+            
             # Step 3: Display the fully parsed response
             st.write("### Parsed Response")
             st.write(response)
@@ -162,14 +179,10 @@ def add_chatbot_interface(data):
 
             # Add a divider for clarity
             st.divider()
-        
+            
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-    # Add a clear conversation button
-    if st.button("Clear Conversation"):
-        st.session_state.messages = []
-        st.rerun()
 
 
 
