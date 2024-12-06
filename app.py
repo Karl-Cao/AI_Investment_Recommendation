@@ -47,13 +47,12 @@ class InvestmentChatbot:
         return "\n".join(context)
 
     def get_response(self, query, data, conversation_history):
-        """Get response while maintaining conversation context"""
         context = self.prepare_context(data, query)
         
         # Prepare messages array with conversation history
         messages = []
         
-        # Add previous conversation context (limited to last 10 messages to manage token usage)
+        # Add previous conversation context (limited to last 10 messages)
         for msg in conversation_history[-10:]:
             messages.append({
                 "role": msg["role"],
@@ -74,7 +73,8 @@ class InvestmentChatbot:
                 messages=messages
             )
             
-            return response.content
+            # Return response in the same format as before
+            return response
             
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
@@ -83,7 +83,7 @@ class InvestmentChatbot:
 def add_chatbot_interface(data):
     st.title("Investment Analysis Chatbot")
     
-    # Initialize session state for chat history if not exists
+    # Initialize session state for chat history
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     
@@ -101,17 +101,25 @@ def add_chatbot_interface(data):
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
-                # First display the text with bold symbols
-                content = message["content"]
-                if isinstance(content, list):
-                    content = ' '.join(str(item) for item in content)
+                # Handle response formatting
+                response = message["content"]
+                if isinstance(response, list):
+                    response_parts = []
+                    for item in response:
+                        if hasattr(item, 'text'):
+                            response_parts.append(item.text)
+                        else:
+                            response_parts.append(str(item))
+                    response = ' '.join(response_parts)
+                elif hasattr(response, 'content'):
+                    response = response.content
                 
-                # Add links and buttons for stock symbols
-                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', content)
+                # Add links to stock symbols
+                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
                 st.markdown(linked_content)
                 
                 # Add buttons for each symbol
-                symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
+                symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
                 if symbols:
                     st.write("Quick Links:")
                     for symbol in symbols:
@@ -143,14 +151,25 @@ def add_chatbot_interface(data):
         
         # Get and display assistant response
         with st.chat_message("assistant"):
-            # Pass the entire conversation history to get_response
             response = chatbot.get_response(prompt, data, st.session_state.messages)
             
-            # Display formatted response with links
+            # Handle response formatting
+            if isinstance(response, list):
+                response_parts = []
+                for item in response:
+                    if hasattr(item, 'text'):
+                        response_parts.append(item.text)
+                    else:
+                        response_parts.append(str(item))
+                response = ' '.join(response_parts)
+            elif hasattr(response, 'content'):
+                response = response.content
+            
+            # Add links to stock symbols
             linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
             st.markdown(linked_response)
             
-            # Add buttons for each symbol in the response
+            # Add buttons for each symbol
             symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
             if symbols:
                 st.write("Quick Links:")
