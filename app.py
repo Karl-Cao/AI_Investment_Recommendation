@@ -109,10 +109,44 @@ def add_chatbot_interface(data):
     # Initialize chatbot
     chatbot = InvestmentChatbot()
     
+    # Create a set of company names for faster lookup
+    company_names = set(data['company_analysis'].keys())
+    
+    # Function to add links to company mentions
+    def add_company_links(text):
+        words = text.split()
+        linked_words = []
+        i = 0
+        while i < len(words):
+            # Check for two-word company names first
+            two_word_company = None
+            if i < len(words) - 1:
+                possible_company = f"{words[i]} {words[i+1]}"
+                if possible_company in company_names:
+                    two_word_company = possible_company
+            
+            # Check if current word or two-word combination is a company
+            if two_word_company:
+                linked_words.append(f"[{two_word_company}](/company/{two_word_company})")
+                i += 2
+            elif words[i] in company_names:
+                linked_words.append(f"[{words[i]}](/company/{words[i]})")
+                i += 1
+            else:
+                linked_words.append(words[i])
+                i += 1
+        
+        return ' '.join(linked_words)
+    
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            if message["role"] == "assistant":
+                # Add links to company mentions in assistant responses
+                linked_content = add_company_links(message["content"])
+                st.markdown(linked_content, unsafe_allow_html=True)
+            else:
+                st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Ask about investment opportunities..."):
@@ -127,54 +161,54 @@ def add_chatbot_interface(data):
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
             
-            # Step 1: Display the raw response for debugging
-            st.write("### Raw Response from Chatbot")
-            st.write(response)
-            
-            # Step 2: Handle and parse the response if it's a list
+            # Handle response formatting
             if isinstance(response, list):
-                st.write("The response is a list. Extracting text...")
                 response_parts = []
                 for item in response:
-                    # Print raw item for debugging purposes
-                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
-                    
-                    # Extract the 'text' attribute if it exists
                     if hasattr(item, 'text'):
                         response_parts.append(item.text)
                     else:
-                        response_parts.append(str(item))  # Fallback to converting to string
-                
-                # Join parts into a single response string
+                        response_parts.append(str(item))
                 response = ' '.join(response_parts)
             
-            # Step 3: Display the fully parsed response
-            st.write("### Parsed Response")
-            st.write(response)
+            # Add links to company mentions
+            linked_response = add_company_links(response)
             
             # Parse the response into sections and display formatted version
-            sections = response.split('\n\n')
+            sections = linked_response.split('\n\n')
             
             for section in sections:
                 if ':' in section and section.split(':')[0].isupper():
                     # It's a header section
                     header, content = section.split(':', 1)
                     st.subheader(header.strip())
-                    st.write(content.strip())
+                    st.markdown(content.strip(), unsafe_allow_html=True)
                 else:
                     # Regular text
                     if '- ' in section:
                         points = section.split('- ')
                         for point in points[1:]:  # Skip first empty split
-                            st.markdown(f"• {point.strip()}")
+                            st.markdown(f"• {point.strip()}", unsafe_allow_html=True)
                     else:
-                        st.write(section.strip())
+                        st.markdown(section.strip(), unsafe_allow_html=True)
 
             # Add a divider for clarity
             st.divider()
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
+
+    # Handle company link clicks
+    def handle_company_click():
+        # Get the clicked company from the URL
+        company = st.experimental_get_query_params().get('company', [None])[0]
+        if company:
+            navigate_to_company(company)
+            # Clear the URL parameter
+            st.experimental_set_query_params()
+    
+    # Call the handler
+    handle_company_click()
 
 
 
