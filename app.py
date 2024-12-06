@@ -59,6 +59,7 @@ class InvestmentChatbot:
             ]
         )
         
+        # Get the content from the response
         return response.content
 
 # Load data
