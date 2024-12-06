@@ -127,23 +127,33 @@ def add_chatbot_interface(data):
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
             
-            # Handle the response which might be a list of TextBlock objects
+            # Step 1: Display the raw response for debugging
+            st.write("### Raw Response from Chatbot")
+            st.write(response)
+            
+            # Step 2: Handle and parse the response if it's a list
             if isinstance(response, list):
+                st.write("The response is a list. Extracting text...")
                 response_parts = []
                 for item in response:
-                    # Extract the 'text' attribute from the TextBlock object
+                    # Print raw item for debugging purposes
+                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
+                    
+                    # Extract the 'text' attribute if it exists
                     if hasattr(item, 'text'):
                         response_parts.append(item.text)
                     else:
                         response_parts.append(str(item))  # Fallback to converting to string
                 
+                # Join parts into a single response string
                 response = ' '.join(response_parts)
             
-            # The response should now be a string
-            text = response
-
-            # If response contains multiple sections (separated by headers with ':')
-            sections = text.split('\n\n')
+            # Step 3: Display the fully parsed response
+            st.write("### Parsed Response")
+            st.write(response)
+            
+            # Parse the response into sections and display formatted version
+            sections = response.split('\n\n')
             
             for section in sections:
                 if ':' in section and section.split(':')[0].isupper():
@@ -153,7 +163,6 @@ def add_chatbot_interface(data):
                     st.write(content.strip())
                 else:
                     # Regular text
-                    # Check if it's a bullet point list
                     if '- ' in section:
                         points = section.split('- ')
                         for point in points[1:]:  # Skip first empty split
@@ -166,6 +175,7 @@ def add_chatbot_interface(data):
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 
 
