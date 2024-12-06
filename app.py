@@ -126,17 +126,25 @@ def add_chatbot_interface(data):
         # Get and display assistant response
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
-
-            # Parse and format the response
+            
+            # Handle the response which might be a list of TextBlock objects
             if isinstance(response, list):
-                response = ' '.join(response)
-
+                response_parts = []
+                for item in response:
+                    # Assuming the text content is in the `content` attribute of each TextBlock
+                    if hasattr(item, 'content'):
+                        response_parts.append(item.content)
+                    else:
+                        response_parts.append(str(item))  # Convert to string if no `content` attribute
+                
+                response = ' '.join(response_parts)
+            
             # The response should now be a string
             text = response
 
-            # Split by double newline to get sections
+            # If response contains multiple sections (separated by headers with ':')
             sections = text.split('\n\n')
-
+            
             for section in sections:
                 if ':' in section and section.split(':')[0].isupper():
                     # It's a header section
@@ -158,6 +166,7 @@ def add_chatbot_interface(data):
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 @st.cache_data
 def load_sp500_data():
