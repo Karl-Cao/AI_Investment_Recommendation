@@ -59,8 +59,14 @@ class InvestmentChatbot:
             ]
         )
         
-        # Get the content from the response
-        return response.content
+        # Assuming response content could be in a list, handle that here
+        if isinstance(response, list):
+            response = ' '.join(response)
+        elif hasattr(response, 'content'):
+            response = response.content
+        
+        return response
+
 
 # Load data
 @st.cache_data
@@ -120,14 +126,17 @@ def add_chatbot_interface(data):
         # Get and display assistant response
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
-            
+
             # Parse and format the response
-            # The response is already a string from the API
+            if isinstance(response, list):
+                response = ' '.join(response)
+
+            # The response should now be a string
             text = response
-            
-            # If response contains multiple sections (separated by headers with ':')
+
+            # Split by double newline to get sections
             sections = text.split('\n\n')
-            
+
             for section in sections:
                 if ':' in section and section.split(':')[0].isupper():
                     # It's a header section
