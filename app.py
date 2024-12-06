@@ -119,7 +119,31 @@ def add_chatbot_interface(data):
         # Get and display assistant response
         with st.chat_message("assistant"):
             response = chatbot.get_response(prompt, data)
-            st.markdown(response)
+            
+            # Parse and format the response
+            text = response.text
+            
+            # If response contains multiple sections (separated by headers with ':')
+            sections = text.split('\n\n')
+            
+            for section in sections:
+                if ':' in section and section.split(':')[0].isupper():
+                    # It's a header section
+                    header, content = section.split(':', 1)
+                    st.subheader(header.strip())
+                    st.write(content.strip())
+                else:
+                    # Regular text
+                    # Check if it's a bullet point list
+                    if '- ' in section:
+                        points = section.split('- ')
+                        for point in points[1:]:  # Skip first empty split
+                            st.markdown(f"• {point.strip()}")
+                    else:
+                        st.write(section.strip())
+
+            # Add a divider for clarity
+            st.divider()
             
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
