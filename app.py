@@ -46,18 +46,19 @@ class InvestmentChatbot:
                 
         return "\n".join(context)
 
-    def get_response(self, query, data, conversation_history):
+    def get_response(self, query, data):
         context = self.prepare_context(data, query)
         
-        # Prepare messages array with conversation history
+        # Include previous conversation context
         messages = []
-        
-        # Add previous conversation context (limited to last 10 messages)
-        for msg in conversation_history[-10:]:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
+        if 'messages' in st.session_state:
+            # Get last 5 messages for context (adjust number as needed)
+            recent_messages = st.session_state.messages[-5:]
+            for msg in recent_messages:
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
         
         # Add current query
         messages.append({
@@ -72,10 +73,7 @@ class InvestmentChatbot:
                 max_tokens=1024,
                 messages=messages
             )
-            
-            # Return response in the same format as before
             return response
-            
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
             return "I apologize, but I encountered an error. Could you please rephrase your question?"
@@ -90,55 +88,10 @@ def add_chatbot_interface(data):
     # Initialize chatbot
     chatbot = InvestmentChatbot()
     
-    # Create a mapping of symbols to company names from your data
-    symbol_to_company = {}
-    for company_name, details in data['company_analysis'].items():
-        if 'symbols' in details:
-            for symbol in details['symbols'].split(','):
-                symbol_to_company[symbol.strip()] = company_name
-    
     # Display chat history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            if message["role"] == "assistant":
-                # Handle response formatting
-                response = message["content"]
-                if isinstance(response, list):
-                    response_parts = []
-                    for item in response:
-                        if hasattr(item, 'text'):
-                            response_parts.append(item.text)
-                        else:
-                            response_parts.append(str(item))
-                    response = ' '.join(response_parts)
-                elif hasattr(response, 'content'):
-                    response = response.content
-                
-                # Add links to stock symbols
-                linked_content = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
-                st.markdown(linked_content)
-                
-                # Add buttons for each symbol
-                symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
-                if symbols:
-                    st.write("Quick Links:")
-                    for symbol in symbols:
-                        company_name = symbol_to_company.get(symbol)
-                        col1, col2 = st.columns(2)
-                        
-                        if company_name:
-                            with col1:
-                                if st.button(f"📊 View {company_name} Analysis", 
-                                           key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
-                                    navigate_to_company(company_name)
-                        
-                        with col2:
-                            if st.button(f"🔗 Yahoo Finance ({symbol})", 
-                                       key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
-                                st.markdown(f'<script>window.open("https://finance.yahoo.com/quote/{symbol}", "_blank");</script>', 
-                                          unsafe_allow_html=True)
-            else:
-                st.markdown(message["content"])
+            st.markdown(message["content"])
     
     # Chat input
     if prompt := st.chat_input("Ask about investment opportunities..."):
@@ -151,50 +104,66 @@ def add_chatbot_interface(data):
         
         # Get and display assistant response
         with st.chat_message("assistant"):
-            response = chatbot.get_response(prompt, data, st.session_state.messages)
+            response = chatbot.get_response(prompt, data)
             
-            # Handle response formatting
+            # Step 1: Display the raw response for debugging
+            st.write("### Raw Response from Chatbot")
+            st.write(response)
+            
+            # Step 2: Handle and parse the response if it's a list
             if isinstance(response, list):
+                st.write("The response is a list. Extracting text...")
                 response_parts = []
                 for item in response:
+                    # Print raw item for debugging purposes
+                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
+                    
+                    # Extract the 'text' attribute if it exists
                     if hasattr(item, 'text'):
                         response_parts.append(item.text)
                     else:
-                        response_parts.append(str(item))
+                        response_parts.append(str(item))  # Fallback to converting to string
+                
+                # Join parts into a single response string
                 response = ' '.join(response_parts)
             elif hasattr(response, 'content'):
                 response = response.content
             
-            # Add links to stock symbols
-            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
-            st.markdown(linked_response)
+            # Step 3: Display the fully parsed response
+            st.write("### Parsed Response")
+            st.write(response)
             
-            # Add buttons for each symbol
-            symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
-            if symbols:
-                st.write("Quick Links:")
-                for symbol in symbols:
-                    company_name = symbol_to_company.get(symbol)
-                    col1, col2 = st.columns(2)
-                    
-                    if company_name:
-                        with col1:
-                            if st.button(f"📊 View {company_name} Analysis", 
-                                       key=f"resp_company_{symbol}"):
-                                navigate_to_company(company_name)
-                    
-                    with col2:
-                        if st.button(f"🔗 Yahoo Finance ({symbol})", 
-                                   key=f"resp_yahoo_{symbol}"):
-                            st.markdown(f'<script>window.open("https://finance.yahoo.com/quote/{symbol}", "_blank");</script>', 
-                                      unsafe_allow_html=True)
+            # Parse the response into sections and display formatted version
+            sections = response.split('\n\n')
             
+            for section in sections:
+                if ':' in section and section.split(':')[0].isupper():
+                    # It's a header section
+                    header, content = section.split(':', 1)
+                    st.subheader(header.strip())
+                    st.write(content.strip())
+                else:
+                    # Regular text
+                    if '- ' in section:
+                        points = section.split('- ')
+                        for point in points[1:]:  # Skip first empty split
+                            st.markdown(f"• {point.strip()}")
+                    else:
+                        st.write(section.strip())
+
             # Add a divider for clarity
             st.divider()
             
-            # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            # Add company links after the response
+            # You can add company link buttons here if needed
+            
+        # Add assistant response to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
+    # Add a clear conversation button
+    if st.button("Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()
 
 # Load data
 @st.cache_data
