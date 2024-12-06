@@ -145,8 +145,8 @@ def add_chatbot_interface(data):
             # External Yahoo Finance link
            # Replace the current Yahoo Finance button logic
             with col2:
-                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
-                    st.markdown(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+                st.write(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+
 
     
     # Display chat history
