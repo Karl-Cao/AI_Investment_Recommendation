@@ -1,10 +1,70 @@
 import os
 import json
 import pandas as pd
+from anthropic import Anthropic
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+
+# Initialize Anthropic client
+anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+
+class InvestmentChatbot:
+    def __init__(self):
+        self.system_prompt = """You are an investment analysis assistant. You have access to detailed company analysis data including:
+        - Company recommendations (Invest/Hold/Avoid)
+        - Ultimate strength scores
+        - Industry-specific analysis
+        - Market trends
+        - Company-specific metrics and explanations
+        
+        Use this data to provide informed responses about investment opportunities and market trends.
+        Always explain your reasoning and cite specific metrics when making recommendations.
+        """
+        
+    def prepare_context(self, data, query):
+        """Prepare relevant context based on the user's query"""
+        context = []
+        
+        # Add relevant company data
+        for company, details in data['company_analysis'].items():
+            if company.lower() in query.lower():
+                context.append(f"Company Analysis for {company}:")
+                context.append(f"Recommendation: {details['recommendation']}")
+                context.append(f"Ultimate Strength: {details['ultimate_strength']}")
+                context.append(f"Industry: {details.get('industry', 'N/A')}")
+                context.append(f"Explanation: {details.get('explanation', '')}")
+                
+        # Add sector trends if mentioned
+        for sector, analysis in data['consolidated_trends'].items():
+            if sector.lower() in query.lower():
+                context.append(f"\nSector Analysis for {sector}:")
+                context.append(analysis)
+                
+        return "\n".join(context)
+
+    def get_response(self, query, data):
+        context = self.prepare_context(data, query)
+        
+        messages = [
+            {
+                "role": "system",
+                "content": f"{self.system_prompt}\n\nRelevant Data:\n{context}"
+            },
+            {
+                "role": "user",
+                "content": query
+            }
+        ]
+        
+        response = anthropic.messages.create(
+            model="claude-3-5-sonnet-latest",
+            max_tokens=1024,
+            messages=messages
+        )
+        
+        return response.content
 
 # Load data
 @st.cache_data
@@ -36,6 +96,38 @@ def load_data():
             company_data['symbols'] = row.get('symbol', 'N/A')
 
     return data
+
+def add_chatbot_interface(data):
+    st.title("Investment Analysis Chatbot")
+    
+    # Initialize session state for chat history
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+    
+    # Initialize chatbot
+    chatbot = InvestmentChatbot()
+    
+    # Display chat history
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    
+    # Chat input
+    if prompt := st.chat_input("Ask about investment opportunities..."):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        # Get and display assistant response
+        with st.chat_message("assistant"):
+            response = chatbot.get_response(prompt, data)
+            st.markdown(response)
+            
+        # Add assistant response to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
 @st.cache_data
 def load_sp500_data():
@@ -90,6 +182,8 @@ def main():
         st.session_state.active_tab = "Company Analysis"
     if st.sidebar.button("Sector Trends"):
         st.session_state.active_tab = "Sector Trends"
+    if st.sidebar.button("Chat"):  # New chat button
+        st.session_state.active_tab = "Chat"
     if st.sidebar.button("Suggest a Company"):
         st.session_state.active_tab = "Suggest a Company"
 
@@ -100,6 +194,8 @@ def main():
         show_company_analysis(data, sp500_companies)
     elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
+    elif st.session_state.active_tab == "Chat":  # New chat tab
+        add_chatbot_interface(data)
     elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
