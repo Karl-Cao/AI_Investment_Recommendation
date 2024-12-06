@@ -143,11 +143,11 @@ def add_chatbot_interface(data):
                         navigate_to_company(company_name)
             
             # External Yahoo Finance link
-           # Replace the current Yahoo Finance button logic
             with col2:
-                st.write(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
-
-
+                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
+                    st.markdown(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+            
+            return f"**{symbol}**"  # Keep the symbol visible in the text
     
     # Display chat history
     for message in st.session_state.messages:
