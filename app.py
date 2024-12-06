@@ -216,25 +216,47 @@ def add_chatbot_interface(data):
             linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
             st.markdown(linked_response)
             
-            # Add buttons for each symbol in the response
+            # Extract symbols from the response
             symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
-            if symbols:
-                st.write("Quick Links:")
-                for symbol in symbols:
-                    company_name = symbol_to_company.get(symbol)
-                    col1, col2 = st.columns(2)
 
-                    # Button for internal company analysis link
-                    if company_name:
+            # Extract company names from the response
+            company_names = []
+            for company in symbol_to_company.values():
+                if company.lower() in response.lower():
+                    company_names.append(company)
+
+            # Use a set to avoid duplicates in case both the symbol and the company name are found
+            unique_matches = set(symbols + company_names)
+
+            if unique_matches:
+                st.write("Quick Links:")
+
+                # Iterate over unique matches
+                for match in unique_matches:
+                    # Determine if the match is a symbol or a company name
+                    if match in symbol_to_company:
+                        # It's a stock symbol, get the corresponding company name
+                        company_name = symbol_to_company[match]
+                        symbol = match
+                    else:
+                        # It's a company name, get the corresponding symbol
+                        company_name = match
+                        # Reverse lookup for the symbol from the company name
+                        symbol = next((key for key, value in symbol_to_company.items() if value == company_name), None)
+
+                    # Ensure we have both company_name and symbol before generating buttons
+                    if company_name and symbol:
+                        # Create buttons for both company analysis and Yahoo Finance
+                        col1, col2 = st.columns(2)
+
                         with col1:
                             if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
                                 navigate_to_company(company_name)
 
-                    # Link for Yahoo Finance - avoid JavaScript
-                    with col2:
-                        # Create a clickable markdown link instead of using JavaScript
-                        yahoo_link = f"https://finance.yahoo.com/quote/{symbol}"
-                        st.markdown(f"[🔗 Yahoo Finance ({symbol})]({yahoo_link})", unsafe_allow_html=True)
+                        with col2:
+                            yahoo_link = f"https://finance.yahoo.com/quote/{symbol}"
+                            st.markdown(f"[🔗 Yahoo Finance ({symbol})]({yahoo_link})", unsafe_allow_html=True)
+
 
             
             # Add a divider for clarity
