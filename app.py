@@ -73,10 +73,39 @@ class InvestmentChatbot:
                 max_tokens=1024,
                 messages=messages
             )
-            return response
+            
+            # Handle the response properly
+            return self.extract_response_content(response)
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
             return "I apologize, but I encountered an error. Could you please rephrase your question?"
+
+    def extract_response_content(self, response):
+        """Extract the text content from the response object"""
+        # If response is a list of TextBlock-like objects
+        if isinstance(response, list):
+            response_parts = []
+            for item in response:
+                # Extract the 'text' attribute if available
+                if hasattr(item, 'text'):
+                    response_parts.append(item.text)
+                else:
+                    response_parts.append(str(item))  # Fallback if no 'text' attribute
+                
+            # Join all parts to form the full response
+            return ' '.join(response_parts)
+
+        # If response is a single object with a content attribute
+        elif hasattr(response, 'content'):
+            return response.content
+
+        # If response is already a string, return it
+        elif isinstance(response, str):
+            return response
+
+        # Fallback in case of an unexpected format
+        return str(response)
+
 
 def add_chatbot_interface(data):
     st.title("Investment Analysis Chatbot")
@@ -110,25 +139,6 @@ def add_chatbot_interface(data):
             st.write("### Raw Response from Chatbot")
             st.write(response)
             
-            # Step 2: Handle and parse the response if it's a list
-            if isinstance(response, list):
-                st.write("The response is a list. Extracting text...")
-                response_parts = []
-                for item in response:
-                    # Print raw item for debugging purposes
-                    st.write(f"Item Type: {type(item)}, Item Content: {item}")
-                    
-                    # Extract the 'text' attribute if it exists
-                    if hasattr(item, 'text'):
-                        response_parts.append(item.text)
-                    else:
-                        response_parts.append(str(item))  # Fallback to converting to string
-                
-                # Join parts into a single response string
-                response = ' '.join(response_parts)
-            elif hasattr(response, 'content'):
-                response = response.content
-            
             # Step 3: Display the fully parsed response
             st.write("### Parsed Response")
             st.write(response)
@@ -153,10 +163,7 @@ def add_chatbot_interface(data):
 
             # Add a divider for clarity
             st.divider()
-            
-            # Add company links after the response
-            # You can add company link buttons here if needed
-            
+        
         # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
 
@@ -164,6 +171,7 @@ def add_chatbot_interface(data):
     if st.button("Clear Conversation"):
         st.session_state.messages = []
         st.rerun()
+
 
 # Load data
 @st.cache_data
