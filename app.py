@@ -121,7 +121,8 @@ def add_chatbot_interface(data):
             response = chatbot.get_response(prompt, data)
             
             # Parse and format the response
-            text = response.text
+            # The response is already a string from the API
+            text = response
             
             # If response contains multiple sections (separated by headers with ':')
             sections = text.split('\n\n')
