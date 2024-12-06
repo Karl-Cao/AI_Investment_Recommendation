@@ -48,7 +48,7 @@ class InvestmentChatbot:
         context = self.prepare_context(data, query)
         
         response = anthropic.messages.create(
-            model="claude-3-sonnet-latest",
+            model="claude-3-5-sonnet-latest",
             system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
             max_tokens=1024,
             messages=[
