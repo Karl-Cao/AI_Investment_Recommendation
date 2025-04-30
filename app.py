@@ -606,18 +606,28 @@ def show_backtest(data):
     
     # Parameters for backtesting
     st.subheader("Backtest Parameters")
+    
+    # Calculate default dates that ensure data is available
+    # Use dates from 2023 since we're in a research/education context
+    default_end_date = datetime(2023, 12, 31)
+    default_start_date = datetime(2023, 10, 1)
+    
     col1, col2 = st.columns(2)
-    
-    # Use recent historical dates that will have available data
-    today = datetime.now()
-    default_end_date = today - timedelta(days=7)  # One week ago to ensure data is available
-    default_start_date = default_end_date - timedelta(days=90)  # 3 months before end date
-    
     with col1:
         start_date = st.date_input("Start Date", default_start_date)
-    
     with col2:
         end_date = st.date_input("End Date", default_end_date)
+    
+    # Validate date range
+    if start_date >= end_date:
+        st.error("Error: End date must be after start date")
+        return
+    
+    # Check that date range isn't too short
+    min_days = 14
+    if (end_date - start_date).days < min_days:
+        st.error(f"Error: Date range must be at least {min_days} days")
+        return
     
     # Select strategy based on ultimate strength
     st.subheader("Select Investment Strategy")
@@ -633,21 +643,28 @@ def show_backtest(data):
     if st.button("Run Backtest"):
         if not selected_companies.empty:
             with st.spinner("Running backtest..."):
-                # Get S&P 500 performance for the same period with proper error handling
-                try:
-                    sp500 = yf.download('^GSPC', start=start_date, end=end_date)
-                    
-                    # Check if we got valid data
-                    if not sp500.empty and len(sp500) > 1:
-                        sp500_return = (sp500['Close'].iloc[-1] / sp500['Close'].iloc[0] - 1) * 100
-                    else:
-                        st.error("Unable to retrieve sufficient S&P 500 data for the selected date range.")
-                        sp500_return = 0
-                        return
-                except Exception as e:
-                    st.error(f"Error retrieving S&P 500 data: {str(e)}")
-                    sp500_return = 0
+                # Get S&P 500 performance for comparison using multiple possible tickers
+                sp500_tickers = ['^GSPC', 'SPY', 'VOO', 'IVV']
+                sp500_data = None
+                sp500_ticker_used = None
+                
+                for ticker in sp500_tickers:
+                    try:
+                        data = yf.download(ticker, start=start_date, end=end_date)
+                        if not data.empty and len(data) > 1:
+                            sp500_data = data
+                            sp500_ticker_used = ticker
+                            break
+                    except Exception as e:
+                        continue
+                
+                if sp500_data is None:
+                    st.error("Unable to retrieve S&P 500 data for the selected date range.")
+                    st.info("Try selecting a different date range or check your internet connection.")
                     return
+                
+                # Calculate S&P 500 return
+                sp500_return = (sp500_data['Close'].iloc[-1] / sp500_data['Close'].iloc[0] - 1) * 100
                 
                 # Calculate returns for selected companies
                 company_returns = []
@@ -698,16 +715,19 @@ def show_backtest(data):
                     st.subheader("Backtest Results")
                     col1, col2, col3 = st.columns(3)
                     col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
-                    col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
-                    col3.metric("Outperformance", f"{portfolio_return - sp500_return:.2f}%", 
-                               f"{portfolio_return - sp500_return:.2f}%")
+                    col2.metric("S&P 500 Return", f"{sp500_return:.2f}%", 
+                               f"Used {sp500_ticker_used}")
+                    diff = portfolio_return - sp500_return
+                    arrow = "↑" if diff > 0 else "↓"
+                    col3.metric("Outperformance", f"{diff:.2f}%", 
+                               f"{arrow} {abs(diff):.2f}%")
                     
                     # Plot returns
                     fig = px.bar(returns_df, x='company', y='return_pct', 
                                 title="Individual Company Returns",
                                 labels={'return_pct': 'Return (%)', 'company': 'Company'})
                     fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
-                                 annotation_text="S&P 500 Return")
+                                 annotation_text=f"S&P 500 Return ({sp500_ticker_used})")
                     fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
                                  annotation_text="Portfolio Average Return")
                     st.plotly_chart(fig)
@@ -724,11 +744,13 @@ def show_backtest(data):
     st.info("""
     **How the Backtest Works**:
     
-    1. Select a start date (default: November 1, 2024)
-    2. Select an end date (default: 3 months later)
-    3. Choose a minimum Ultimate Strength Score to filter companies
-    4. The backtest simulates investing equally in all companies with scores above your threshold
-    5. Returns are compared against the S&P 500 benchmark for the same period
+    1. Select a start date and an end date for your test period
+    2. Choose a minimum Ultimate Strength Score to filter companies
+    3. The backtest simulates investing equally in all companies with scores above your threshold
+    4. Returns are compared against the S&P 500 benchmark for the same period
+    5. Companies without available data are automatically skipped
+    
+    This backtest is for educational purposes only and past performance is not indicative of future results.
     """)
 
 def suggest_company():
@@ -851,16 +873,33 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("**📚 Resources**")
-        st.markdown("- [Investment Basics]()")
-        st.markdown("- [Market Analysis Guide]()")
+        
+        if st.button("📖 Investment Basics", key="res_basics"):
+            # Instead of using non-working links, navigate to appropriate sections
+            st.session_state.active_tab = "Overview"
+            st.rerun()
+            
+        if st.button("📊 Market Analysis Guide", key="res_guide"):
+            st.session_state.active_tab = "Sector Trends"
+            st.rerun()
+            
     with col2:
         st.markdown("**🔗 Quick Links**")
-        st.markdown("- [Top Companies]()")
-        st.markdown("- [Sector Overview]()")
+        
+        if st.button("⭐ Top Companies", key="link_top"):
+            # Navigate to company analysis with default filter
+            st.session_state.active_tab = "Company Analysis"
+            st.rerun()
+            
+        if st.button("🏭 Sector Overview", key="link_sector"):
+            st.session_state.active_tab = "Sector Trends"
+            st.rerun()
+            
     with col3:
         st.markdown("**💡 Tips**")
-        st.markdown("- Ask specific questions")
-        st.markdown("- Compare multiple companies")
+        st.markdown("- Ask specific questions about companies")
+        st.markdown("- Compare multiple investment options")
+        st.markdown("- Try the new backtesting feature")
 
 if __name__ == "__main__":
     main()
