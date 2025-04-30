@@ -8,6 +8,25 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# Fix for yfinance cache directory issue
+try:
+    # Create a local cache directory that Streamlit can write to
+    CACHE_DIR = ".cache"
+    
+    # Create the cache dir if it doesn't exist
+    Path(CACHE_DIR).mkdir(exist_ok=True)
+    
+    # Configure yfinance to use our cache directory
+    yf.set_tz_cache_location(CACHE_DIR)
+    
+    # Alternative approach if needed:
+    # import os
+    # os.environ["PYTHONPATH"] = CACHE_DIR
+    
+except Exception as e:
+    st.warning(f"Could not configure yfinance cache directory: {str(e)}")
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
