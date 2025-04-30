@@ -588,15 +588,15 @@ def show_backtest(data):
                     skipped_companies = []
                     
                     # Create a status container
-                    status = st.status("Calculating returns for each company...")
+                    status_container = st.status("Processing companies...")
                     
-                    for _, row in selected_companies.iterrows():
+                    for idx, row in selected_companies.iterrows():
                         if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
                             skipped_companies.append(f"{row['company']} (No symbol available)")
                             continue
                             
-                        # Update status message - note this is different from the previous code
-                        status.update(label=f"Processing {row['company']} ({row['symbol']})...")
+                        # Update status message - using label parameter correctly
+                        status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
                         
                         # Simulate company returns based on strength score
                         strength_factor = row['ultimate_strength'] / 10.0  # Normalize to 0-1 range
@@ -618,8 +618,7 @@ def show_backtest(data):
                         })
                     
                     # Update final status
-                    status.update(label="Backtest calculation complete!")
-                    status.complete()
+                    status_container.update(label="Backtest calculation complete!", state="complete")
                     
                     # Display any skipped companies
                     if skipped_companies:
