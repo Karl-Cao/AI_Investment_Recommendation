@@ -551,11 +551,15 @@ def show_backtest(data):
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Start Date", default_start_date)
+        # Convert date to datetime for consistent handling
+        start_datetime = datetime.combine(start_date, datetime.min.time())
     with col2:
         end_date = st.date_input("End Date", default_end_date)
+        # Convert date to datetime for consistent handling
+        end_datetime = datetime.combine(end_date, datetime.min.time())
     
     # Validate date range
-    if start_date >= end_date:
+    if start_datetime >= end_datetime:
         st.error("Error: End date must be after start date")
         return
     
@@ -579,7 +583,7 @@ def show_backtest(data):
                 
                 try:
                     # Calculate duration between start and end date
-                    date_diff = (end_date - start_date).days
+                    date_diff = (end_datetime - start_datetime).days
                     
                     # Different market conditions for different time periods
                     # This dictionary maps time periods to market conditions
@@ -607,10 +611,10 @@ def show_backtest(data):
                     # Find the closest matching period or use default
                     selected_period = None
                     for (period_start, period_end), conditions in market_conditions.items():
-                        if period_start == 'default':
+                        if isinstance(period_start, str) and period_start == 'default':
                             continue  # Skip the default entry when looking for matches
                             
-                        if abs((period_start - start_date).days) <= 15 and abs((period_end - end_date).days) <= 15:
+                        if abs((period_start - start_datetime).days) <= 15 and abs((period_end - end_datetime).days) <= 15:
                             selected_period = conditions
                             break
                     
