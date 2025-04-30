@@ -676,31 +676,31 @@ def show_sector_trends(data):
 #         else:
 #             st.warning("No companies match the selected criteria.")
     
-#     st.info("""
-#     **How the Backtest Works**:
+    # st.info("""
+    # **How the Backtest Works**:
     
-#     1. Select a start date and an end date for your test period
-#     2. Choose a minimum Ultimate Strength Score to filter companies
-#     3. The backtest invests equally in all companies with scores above your threshold
-#     4. Performance is calculated using actual historical market data from Yahoo Finance
-#     5. Returns are compared against the S&P 500 benchmark for the same period
+    # 1. Select a start date and an end date for your test period
+    # 2. Choose a minimum Ultimate Strength Score to filter companies
+    # 3. The backtest invests equally in all companies with scores above your threshold
+    # 4. Performance is calculated using actual historical market data from Yahoo Finance
+    # 5. Returns are compared against the S&P 500 benchmark for the same period
     
-#     This backtest uses real market data to verify if your Ultimate Strength scores are predictive of stock performance.
-#     """)
+    # This backtest uses real market data to verify if your Ultimate Strength scores are predictive of stock performance.
+    # """)
     
-#     # Information about the methodology
-#     with st.expander("ℹ️ About Backtest Methodology"):
-#         st.markdown("""
-#         This backtest uses real historical market data to:
+    # # Information about the methodology
+    # with st.expander("ℹ️ About Backtest Methodology"):
+    #     st.markdown("""
+    #     This backtest uses real historical market data to:
         
-#         * Test if the Ultimate Strength score is predictive of actual stock performance
-#         * Compare your portfolio selection against the S&P 500 benchmark
-#         * Analyze the correlation between strength scores and actual returns
-#         * Visualize performance across your selected time period
+    #     * Test if the Ultimate Strength score is predictive of actual stock performance
+    #     * Compare your portfolio selection against the S&P 500 benchmark
+    #     * Analyze the correlation between strength scores and actual returns
+    #     * Visualize performance across your selected time period
         
-#         The correlation coefficient helps you evaluate the predictive power of the Ultimate Strength score.
-#         Higher correlation values indicate that stocks with higher scores tend to perform better in reality.
-#         """)
+    #     The correlation coefficient helps you evaluate the predictive power of the Ultimate Strength score.
+    #     Higher correlation values indicate that stocks with higher scores tend to perform better in reality.
+    #     """)
 def show_backtest(data):
     st.header("Investment Strategy Backtest")
     
@@ -929,6 +929,31 @@ def show_backtest(data):
                     st.error(f"Error during backtest: {str(e)}")
         else:
             st.warning("No companies match the selected criteria.")
+    st.info("""
+    **How the Backtest Works**:
+    
+    1. Select a start date and an end date for your test period
+    2. Choose a minimum Ultimate Strength Score to filter companies
+    3. The backtest invests equally in all companies with scores above your threshold
+    4. Performance is calculated using actual historical market data from Yahoo Finance
+    5. Returns are compared against the S&P 500 benchmark for the same period
+    
+    This backtest uses real market data to verify if your Ultimate Strength scores are predictive of stock performance.
+    """)
+    
+    # Information about the methodology
+    with st.expander("ℹ️ About Backtest Methodology"):
+        st.markdown("""
+        This backtest uses real historical market data to:
+        
+        * Test if the Ultimate Strength score is predictive of actual stock performance
+        * Compare your portfolio selection against the S&P 500 benchmark
+        * Analyze the correlation between strength scores and actual returns
+        * Visualize performance across your selected time period
+        
+        The correlation coefficient helps you evaluate the predictive power of the Ultimate Strength score.
+        Higher correlation values indicate that stocks with higher scores tend to perform better in reality.
+        """)
 
 def suggest_company():
     st.header("Suggest a Company for Analysis")
