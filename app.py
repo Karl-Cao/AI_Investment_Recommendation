@@ -477,20 +477,27 @@ def display_company_info(company_data, company_name, full_data):
     st.subheader("Stock Price Tracking")
     if symbol:
         try:
-            # Primary method: yfinance
-            stock = yf.Ticker(symbol)
-            price_data = stock.history(period='6mo')
+            # Try to get data from Stooq using pandas-datareader
+            start_date = datetime.now() - timedelta(days=180)  # 6 months of data
+            end_date = datetime.now()
+            
+            # Use 'stooq' as the data source
+            price_data = web.DataReader(symbol, 'stooq', start=start_date, end=end_date)
             
             if isinstance(price_data, pd.DataFrame) and not price_data.empty and len(price_data) > 1:
+                # Stooq data is typically in reverse chronological order, so sort it
+                price_data = price_data.sort_index()
                 st.line_chart(price_data['Close'])
             else:
-                st.warning("No price data available from Yahoo Finance. Try another data source.")
-                
-                # You could add an alternative data source here if needed
+                st.warning("No price data available for this period")
                 
         except Exception as e:
             st.error(f"Error fetching price data: {str(e)}")
-            st.info("Try a different data source or check that the symbol is correct.")
+            # Provide more specific error handling based on the error type
+            if "ConnectTimeout" in str(e):
+                st.info("Connection to the data source timed out. This might be due to network issues or the data source being temporarily unavailable.")
+            else:
+                st.info("Unable to retrieve price data. Try checking the symbol format (some data sources require specific formats like AAPL.US instead of just AAPL).")
 
 
 def show_sector_trends(data):
