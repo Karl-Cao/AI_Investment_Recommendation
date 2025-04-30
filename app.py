@@ -608,11 +608,16 @@ def show_backtest(data):
     st.subheader("Backtest Parameters")
     col1, col2 = st.columns(2)
     
+    # Use recent historical dates that will have available data
+    today = datetime.now()
+    default_end_date = today - timedelta(days=7)  # One week ago to ensure data is available
+    default_start_date = default_end_date - timedelta(days=90)  # 3 months before end date
+    
     with col1:
-        start_date = st.date_input("Start Date", datetime(2024, 11, 1))
+        start_date = st.date_input("Start Date", default_start_date)
     
     with col2:
-        end_date = st.date_input("End Date", datetime(2025, 1, 31))  # Approximately 3 months later
+        end_date = st.date_input("End Date", default_end_date)
     
     # Select strategy based on ultimate strength
     st.subheader("Select Investment Strategy")
@@ -628,29 +633,61 @@ def show_backtest(data):
     if st.button("Run Backtest"):
         if not selected_companies.empty:
             with st.spinner("Running backtest..."):
-                # Get S&P 500 performance for the same period
-                sp500 = yf.download('^GSPC', start=start_date, end=end_date)
-                sp500_return = (sp500['Close'].iloc[-1] / sp500['Close'].iloc[0] - 1) * 100
+                # Get S&P 500 performance for the same period with proper error handling
+                try:
+                    sp500 = yf.download('^GSPC', start=start_date, end=end_date)
+                    
+                    # Check if we got valid data
+                    if not sp500.empty and len(sp500) > 1:
+                        sp500_return = (sp500['Close'].iloc[-1] / sp500['Close'].iloc[0] - 1) * 100
+                    else:
+                        st.error("Unable to retrieve sufficient S&P 500 data for the selected date range.")
+                        sp500_return = 0
+                        return
+                except Exception as e:
+                    st.error(f"Error retrieving S&P 500 data: {str(e)}")
+                    sp500_return = 0
+                    return
                 
                 # Calculate returns for selected companies
                 company_returns = []
-                for _, row in selected_companies.iterrows():
-                    try:
-                        stock_data = yf.download(row['symbol'], start=start_date, end=end_date)
-                        if not stock_data.empty:
-                            start_price = stock_data['Close'].iloc[0]
-                            end_price = stock_data['Close'].iloc[-1]
-                            ret_pct = (end_price / start_price - 1) * 100
-                            company_returns.append({
-                                'company': row['company'],
-                                'symbol': row['symbol'],
-                                'return_pct': ret_pct,
-                                'start_price': start_price,
-                                'end_price': end_price,
-                                'strength': row['ultimate_strength']
-                            })
-                    except Exception as e:
-                        st.error(f"Error getting data for {row['symbol']}: {str(e)}")
+                skipped_companies = []
+                
+                with st.status("Calculating returns for each company...") as status:
+                    for _, row in selected_companies.iterrows():
+                        if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
+                            skipped_companies.append(f"{row['company']} (No symbol available)")
+                            continue
+                            
+                        status.update(f"Processing {row['company']} ({row['symbol']})...")
+                        
+                        try:
+                            stock_data = yf.download(row['symbol'], start=start_date, end=end_date)
+                            if not stock_data.empty and len(stock_data) > 1:
+                                start_price = stock_data['Close'].iloc[0]
+                                end_price = stock_data['Close'].iloc[-1]
+                                ret_pct = (end_price / start_price - 1) * 100
+                                company_returns.append({
+                                    'company': row['company'],
+                                    'symbol': row['symbol'],
+                                    'return_pct': ret_pct,
+                                    'start_price': start_price,
+                                    'end_price': end_price,
+                                    'strength': row['ultimate_strength']
+                                })
+                            else:
+                                skipped_companies.append(f"{row['company']} ({row['symbol']}) - Insufficient data")
+                        except Exception as e:
+                            print(f"Error getting data for {row['symbol']}: {str(e)}")
+                            skipped_companies.append(f"{row['company']} ({row['symbol']}) - Error retrieving data")
+                
+                    status.update(label="Backtest calculation complete!")
+                
+                # Display any skipped companies
+                if skipped_companies:
+                    with st.expander(f"⚠️ {len(skipped_companies)} companies were skipped"):
+                        for company in skipped_companies:
+                            st.write(f"- {company}")
                 
                 # Display results
                 if company_returns:
