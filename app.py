@@ -509,179 +509,8 @@ def show_sector_trends(data):
             if st.button(f"📊 View {company} Analysis", key=f"sector_company_{company}"):
                 navigate_to_company(company)
 
-# def show_backtest(data):
-#     st.header("Investment Strategy Backtest")
-    
-#     # Create a DataFrame from the company analysis data
-#     df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
-#     df['company'] = df.index
-    
-#     # Get company symbols
-#     symbols = []
-#     for company in df['company']:
-#         symbol = data['company_analysis'][company].get('symbols', '').split(',')[0].strip()
-#         symbols.append(symbol if symbol else None)
-#     df['symbol'] = symbols
-    
-#     # Remove companies without symbols
-#     df = df[df['symbol'].notna()]
-    
-#     # Parameters for backtesting
-#     st.subheader("Backtest Parameters")
-    
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         start_date = st.date_input("Start Date", datetime(2024, 11, 1))
-#         # Convert date to datetime for consistent handling
-#         start_datetime = datetime.combine(start_date, datetime.min.time())
-#     with col2:
-#         end_date = st.date_input("End Date", datetime(2025, 2, 1))
-#         # Convert date to datetime for consistent handling
-#         end_datetime = datetime.combine(end_date, datetime.min.time())
-    
-#     # Validate date range
-#     if start_datetime >= end_datetime:
-#         st.error("Error: End date must be after start date")
-#         return
-    
-#     # Select strategy based on ultimate strength
-#     st.subheader("Select Investment Strategy")
-    
-#     min_score = st.slider("Minimum Ultimate Strength Score", 
-#                          min_value=float(df['ultimate_strength'].min()), 
-#                          max_value=float(df['ultimate_strength'].max()),
-#                          value=7.0)
-    
-#     # Filter companies based on selected strategy
-#     selected_companies = df[df['ultimate_strength'] >= min_score]
-    
-#     if st.button("Run Backtest"):
-#         if not selected_companies.empty:
-#             with st.spinner("Running backtest..."):
-#                 try:
-#                     # Import yfinance
-#                     import yfinance as yf
-                    
-#                     # Get S&P 500 data for the same period
-#                     sp500 = yf.download('^GSPC', start=start_datetime, end=end_datetime)
-                    
-#                     if sp500.empty:
-#                         st.error("Could not retrieve S&P 500 data for the selected period")
-#                         return
-                    
-#                     # Calculate S&P 500 return for the period
-#                     sp500_start = sp500['Close'].iloc[0]
-#                     sp500_end = sp500['Close'].iloc[-1]
-#                     sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
-                    
-#                     # Create a status container
-#                     status_container = st.status("Calculating portfolio performance...")
-                    
-#                     # Calculate returns for selected companies
-#                     company_returns = []
-#                     skipped_companies = []
-                    
-#                     for idx, row in selected_companies.iterrows():
-#                         if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
-#                             skipped_companies.append(f"{row['company']} (No symbol available)")
-#                             continue
-                            
-#                         # Update status message
-#                         status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
-                        
-#                         try:
-#                             # Get historical data for this stock
-#                             stock_data = yf.download(row['symbol'], start=start_datetime, end=end_datetime)
-                            
-#                             if not stock_data.empty and len(stock_data) > 1:
-#                                 # Calculate return
-#                                 start_price = stock_data['Close'].iloc[0]
-#                                 end_price = stock_data['Close'].iloc[-1]
-#                                 ret_pct = ((end_price - start_price) / start_price) * 100
-                                
-#                                 company_returns.append({
-#                                     'company': row['company'],
-#                                     'symbol': row['symbol'],
-#                                     'return_pct': ret_pct,
-#                                     'start_price': start_price,
-#                                     'end_price': end_price,
-#                                     'strength': row['ultimate_strength']
-#                                 })
-#                             else:
-#                                 skipped_companies.append(f"{row['company']} (No data available)")
-#                         except Exception as e:
-#                             skipped_companies.append(f"{row['company']} (Error: {str(e)})")
-                    
-#                     # Update final status
-#                     status_container.update(label="Backtest calculation complete!", state="complete")
-                    
-#                     # Display results
-#                     if company_returns:
-#                         returns_df = pd.DataFrame(company_returns)
-#                         portfolio_return = returns_df['return_pct'].mean()
-                        
-#                         # Show summary
-#                         st.subheader(f"Backtest Results ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})")
-                        
-#                         col1, col2, col3 = st.columns(3)
-#                         col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
-#                         col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
-#                         diff = portfolio_return - sp500_return
-#                         arrow = "↑" if diff > 0 else "↓"
-#                         col3.metric("Outperformance", f"{diff:.2f}%", 
-#                                    f"{arrow} {abs(diff):.2f}%")
-                        
-#                         # Plot returns
-#                         fig = px.bar(returns_df, x='company', y='return_pct', 
-#                                     title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
-#                                     labels={'return_pct': 'Return (%)', 'company': 'Company'})
-#                         fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
-#                                      annotation_text=f"S&P 500 Return")
-#                         fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
-#                                      annotation_text="Portfolio Average Return")
-#                         st.plotly_chart(fig)
-                        
-#                         # Show detailed company results
-#                         st.subheader("Detailed Results")
-#                         returns_df = returns_df.sort_values(by='return_pct', ascending=False)
-#                         st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
-                        
-#                         # Show correlation between strength and returns
-#                         st.subheader("Strength vs. Returns Correlation")
-#                         corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
-#                                              hover_data=['company', 'symbol'],
-#                                              title="Ultimate Strength Score vs. Returns",
-#                                              labels={'strength': 'Ultimate Strength Score', 
-#                                                      'return_pct': 'Return (%)'})
-#                         # Add trendline
-#                         corr_fig.update_traces(marker=dict(size=10))
-#                         corr_fig.add_traces(
-#                             px.scatter(returns_df, x='strength', y='return_pct', trendline='ols').data[1]
-#                         )
-#                         st.plotly_chart(corr_fig)
-                        
-#                         # Calculate correlation coefficient
-#                         correlation = returns_df['strength'].corr(returns_df['return_pct'])
-#                         st.write(f"**Correlation coefficient:** {correlation:.3f} (higher values indicate stronger relationship between strength scores and returns)")
-                        
-#                         # Display skipped companies
-#                         if skipped_companies:
-#                             st.subheader("Skipped Companies")
-#                             for company in skipped_companies:
-#                                 st.write(f"- {company}")
-#                     else:
-#                         st.warning("No return data available for the selected companies.")
-#                 except Exception as e:
-#                     st.error(f"Error during backtest: {str(e)}")
-#         else:
-#             st.warning("No companies match the selected criteria.")
-
 def show_backtest(data):
     st.header("Investment Strategy Backtest")
-    
-    # Import required libraries
-    import yfinance as yf
-    import uuid
     
     # Create a DataFrame from the company analysis data
     df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
@@ -730,6 +559,9 @@ def show_backtest(data):
         if not selected_companies.empty:
             with st.spinner("Running backtest..."):
                 try:
+                    # Import yfinance
+                    import yfinance as yf
+                    
                     # Get S&P 500 data for the same period
                     sp500 = yf.download('^GSPC', start=start_datetime, end=end_datetime)
                     
@@ -758,10 +590,8 @@ def show_backtest(data):
                         status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
                         
                         try:
-                            # Get historical data for this stock - generate a unique request ID
-                            request_id = str(uuid.uuid4())[:8]
-                            stock_data = yf.download(row['symbol'], start=start_datetime, end=end_datetime, 
-                                                  progress=False, silent=True)
+                            # Get historical data for this stock
+                            stock_data = yf.download(row['symbol'], start=start_datetime, end=end_datetime)
                             
                             if not stock_data.empty and len(stock_data) > 1:
                                 # Calculate return
@@ -801,8 +631,7 @@ def show_backtest(data):
                         col3.metric("Outperformance", f"{diff:.2f}%", 
                                    f"{arrow} {abs(diff):.2f}%")
                         
-                        # Plot returns with unique ID for the figure
-                        fig_id = f"fig_{uuid.uuid4()}"
+                        # Plot returns
                         fig = px.bar(returns_df, x='company', y='return_pct', 
                                     title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
                                     labels={'return_pct': 'Return (%)', 'company': 'Company'})
@@ -817,8 +646,8 @@ def show_backtest(data):
                         returns_df = returns_df.sort_values(by='return_pct', ascending=False)
                         st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
                         
-                        # Show correlation between strength and returns with unique ID
-                        corr_fig_id = f"corr_fig_{uuid.uuid4()}"
+                        # Show correlation between strength and returns
+                        st.subheader("Strength vs. Returns Correlation")
                         corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
                                              hover_data=['company', 'symbol'],
                                              title="Ultimate Strength Score vs. Returns",
