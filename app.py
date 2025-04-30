@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 # Import streamlit first so set_page_config can be the first command
 import streamlit as st
+import yfinance
 
 # Must be the first streamlit command
 st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
@@ -530,6 +531,241 @@ def show_sector_trends(data):
             if st.button(f"📊 View {company} Analysis", key=f"sector_company_{company}"):
                 navigate_to_company(company)
 
+# def show_backtest(data):
+#     st.header("Investment Strategy Backtest")
+    
+#     # Create a DataFrame from the company analysis data
+#     df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
+#     df['company'] = df.index
+    
+#     # Get company symbols
+#     symbols = []
+#     for company in df['company']:
+#         symbol = data['company_analysis'][company].get('symbols', '').split(',')[0].strip()
+#         symbols.append(symbol if symbol else None)
+#     df['symbol'] = symbols
+    
+#     # Remove companies without symbols
+#     df = df[df['symbol'].notna()]
+    
+#     # Parameters for backtesting
+#     st.subheader("Backtest Parameters")
+    
+#     # Set default dates for November 1, 2024 to February 1, 2025 (Q4 2024)
+#     default_start_date = datetime(2024, 11, 1)
+#     default_end_date = datetime(2025, 2, 1)
+    
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         start_date = st.date_input("Start Date", default_start_date)
+#         # Convert date to datetime for consistent handling
+#         start_datetime = datetime.combine(start_date, datetime.min.time())
+#     with col2:
+#         end_date = st.date_input("End Date", default_end_date)
+#         # Convert date to datetime for consistent handling
+#         end_datetime = datetime.combine(end_date, datetime.min.time())
+    
+#     # Validate date range
+#     if start_datetime >= end_datetime:
+#         st.error("Error: End date must be after start date")
+#         return
+    
+#     # Select strategy based on ultimate strength
+#     st.subheader("Select Investment Strategy")
+    
+#     min_score = st.slider("Minimum Ultimate Strength Score", 
+#                          min_value=float(df['ultimate_strength'].min()), 
+#                          max_value=float(df['ultimate_strength'].max()),
+#                          value=7.0)
+    
+#     # Filter companies based on selected strategy
+#     selected_companies = df[df['ultimate_strength'] >= min_score]
+    
+#     if st.button("Run Backtest"):
+#         if not selected_companies.empty:
+#             with st.spinner("Running backtest..."):
+#                 # Import here to avoid reference error
+#                 import random
+#                 random.seed(42)
+                
+#                 try:
+#                     # Calculate duration between start and end date
+#                     date_diff = (end_datetime - start_datetime).days
+                    
+#                     # Different market conditions for different time periods
+#                     # This dictionary maps time periods to market conditions
+#                     market_conditions = {
+#                         # Q4 2024 (Nov - Jan)
+#                         (datetime(2024, 11, 1), datetime(2025, 2, 1)): {
+#                             'sp500_return': 2.7,
+#                             'volatility': 1.0,
+#                             'period_name': 'Q4 2024'
+#                         },
+#                         # Q1 2025 (Feb - Apr)
+#                         (datetime(2025, 2, 1), datetime(2025, 5, 1)): {
+#                             'sp500_return': 1.8,
+#                             'volatility': 1.2,
+#                             'period_name': 'Q1 2025'
+#                         },
+#                         # Default/Custom period (for any other date range)
+#                         ('default', 'default'): {
+#                             'sp500_return': 2.0,  # typical quarterly return
+#                             'volatility': 1.1,
+#                             'period_name': 'Custom period'
+#                         }
+#                     }
+                    
+#                     # Find the closest matching period or use default
+#                     selected_period = None
+#                     for (period_start, period_end), conditions in market_conditions.items():
+#                         if isinstance(period_start, str) and period_start == 'default':
+#                             continue  # Skip the default entry when looking for matches
+                            
+#                         if abs((period_start - start_datetime).days) <= 15 and abs((period_end - end_datetime).days) <= 15:
+#                             selected_period = conditions
+#                             break
+                    
+#                     # Use default if no matching period
+#                     if selected_period is None:
+#                         selected_period = market_conditions[('default', 'default')]
+                        
+#                         # Scale the default return based on the actual duration
+#                         # A typical quarter is ~90 days
+#                         selected_period['sp500_return'] = selected_period['sp500_return'] * (date_diff / 90.0)
+#                         selected_period['period_name'] = f"Custom period ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})"
+                        
+#                     # Get the S&P 500 return for the selected period
+#                     sp500_return = selected_period['sp500_return']
+#                     volatility = selected_period['volatility']
+#                     period_name = selected_period['period_name']
+                    
+#                     # Calculate returns for selected companies
+#                     company_returns = []
+#                     skipped_companies = []
+                    
+#                     # Create a status container
+#                     status_container = st.status("Calculating portfolio performance...")
+                    
+#                     # Use a simplified approach that doesn't rely on API calls
+#                     # This prevents timeouts and speeds up the process
+#                     for idx, row in selected_companies.iterrows():
+#                         if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
+#                             skipped_companies.append(f"{row['company']} (No symbol available)")
+#                             continue
+                            
+#                         # Update status message
+#                         status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
+                        
+#                         # Calculate performance based on ultimate strength
+#                         # Companies with higher scores should generally outperform
+#                         strength_factor = row['ultimate_strength'] / 10.0  # Normalize to 0-1 range
+                        
+#                         # Companies with higher strength will tend to outperform the market
+#                         # But with some variability to reflect real-world conditions
+#                         # Base performance on S&P 500 plus premium for higher strength
+#                         base_return = sp500_return * (0.8 + strength_factor * 0.6)
+                        
+#                         # Add some variability (scaled by volatility factor)
+#                         random_factor = random.uniform(-1.5, 3.0) * volatility * (1 - strength_factor * 0.3)
+#                         ret_pct = base_return + random_factor
+                        
+#                         # Reasonable stock prices for the period
+#                         start_price = random.uniform(50, 200)
+#                         end_price = start_price * (1 + ret_pct/100)
+                        
+#                         company_returns.append({
+#                             'company': row['company'],
+#                             'symbol': row['symbol'],
+#                             'return_pct': ret_pct,
+#                             'start_price': start_price,
+#                             'end_price': end_price,
+#                             'strength': row['ultimate_strength']
+#                         })
+                    
+#                     # Update final status
+#                     status_container.update(label="Backtest calculation complete!", state="complete")
+                    
+#                     # Display results
+#                     if company_returns:
+#                         returns_df = pd.DataFrame(company_returns)
+#                         portfolio_return = returns_df['return_pct'].mean()
+                        
+#                         # Show summary
+#                         st.subheader(f"Backtest Results ({period_name})")
+                        
+#                         col1, col2, col3 = st.columns(3)
+#                         col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
+#                         col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
+#                         diff = portfolio_return - sp500_return
+#                         arrow = "↑" if diff > 0 else "↓"
+#                         col3.metric("Outperformance", f"{diff:.2f}%", 
+#                                    f"{arrow} {abs(diff):.2f}%")
+                        
+#                         # Plot returns
+#                         fig = px.bar(returns_df, x='company', y='return_pct', 
+#                                     title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
+#                                     labels={'return_pct': 'Return (%)', 'company': 'Company'})
+#                         fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
+#                                      annotation_text=f"S&P 500 Return")
+#                         fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
+#                                      annotation_text="Portfolio Average Return")
+#                         st.plotly_chart(fig)
+                        
+#                         # Show detailed company results
+#                         st.subheader("Detailed Results")
+#                         returns_df = returns_df.sort_values(by='return_pct', ascending=False)
+#                         st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
+                        
+#                         # Show correlation between strength and returns
+#                         st.subheader("Strength vs. Returns Correlation")
+#                         corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
+#                                              hover_data=['company', 'symbol'],
+#                                              title="Ultimate Strength vs. Returns",
+#                                              labels={'strength': 'Ultimate Strength Score', 
+#                                                      'return_pct': 'Return (%)'})
+#                         # Add trendline
+#                         corr_fig.update_traces(marker=dict(size=10))
+#                         corr_fig.add_traces(
+#                             px.scatter(returns_df, x='strength', y='return_pct', trendline='ols').data[1]
+#                         )
+#                         st.plotly_chart(corr_fig)
+                        
+#                         # Calculate correlation coefficient
+#                         correlation = returns_df['strength'].corr(returns_df['return_pct'])
+#                         st.write(f"**Correlation coefficient:** {correlation:.3f} (higher values indicate stronger relationship between strength scores and returns)")
+#                     else:
+#                         st.warning("No return data available for the selected companies.")
+#                 except Exception as e:
+#                     st.error(f"Error during backtest: {str(e)}")
+#         else:
+#             st.warning("No companies match the selected criteria.")
+    
+#     st.info("""
+#     **How the Backtest Works**:
+    
+#     1. Select a start date and an end date for your test period
+#     2. Choose a minimum Ultimate Strength Score to filter companies
+#     3. The backtest assumes investing equally in all companies with scores above your threshold
+#     4. Performance is modeled based on market data patterns and the ultimate strength scores
+#     5. Returns are compared against the S&P 500 benchmark for the same period
+    
+#     This backtest is for educational purposes only and past performance is not indicative of future results.
+#     """)
+    
+#     # Information about the methodology
+#     with st.expander("ℹ️ About Backtest Methodology"):
+#         st.markdown("""
+#         This backtest uses a model-based approach that:
+        
+#         * Uses the Ultimate Strength score as a predictor of relative performance
+#         * Incorporates market data for different time periods
+#         * Adjusts returns and volatility based on the selected date range
+#         * Shows the statistical relationship between strength scores and returns
+        
+#         The backtest allows you to evaluate the potential predictive power of the Ultimate Strength score
+#         by demonstrating how a portfolio of higher-scored companies would have performed in different market conditions.
+#         """)
+
 def show_backtest(data):
     st.header("Investment Strategy Backtest")
     
@@ -550,17 +786,13 @@ def show_backtest(data):
     # Parameters for backtesting
     st.subheader("Backtest Parameters")
     
-    # Set default dates for November 1, 2024 to February 1, 2025 (Q4 2024)
-    default_start_date = datetime(2024, 11, 1)
-    default_end_date = datetime(2025, 2, 1)
-    
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Start Date", default_start_date)
+        start_date = st.date_input("Start Date", datetime(2024, 11, 1))
         # Convert date to datetime for consistent handling
         start_datetime = datetime.combine(start_date, datetime.min.time())
     with col2:
-        end_date = st.date_input("End Date", default_end_date)
+        end_date = st.date_input("End Date", datetime(2025, 2, 1))
         # Convert date to datetime for consistent handling
         end_datetime = datetime.combine(end_date, datetime.min.time())
     
@@ -583,70 +815,29 @@ def show_backtest(data):
     if st.button("Run Backtest"):
         if not selected_companies.empty:
             with st.spinner("Running backtest..."):
-                # Import here to avoid reference error
-                import random
-                random.seed(42)
-                
                 try:
-                    # Calculate duration between start and end date
-                    date_diff = (end_datetime - start_datetime).days
+                    # Import yfinance
+                    import yfinance as yf
                     
-                    # Different market conditions for different time periods
-                    # This dictionary maps time periods to market conditions
-                    market_conditions = {
-                        # Q4 2024 (Nov - Jan)
-                        (datetime(2024, 11, 1), datetime(2025, 2, 1)): {
-                            'sp500_return': 2.7,
-                            'volatility': 1.0,
-                            'period_name': 'Q4 2024'
-                        },
-                        # Q1 2025 (Feb - Apr)
-                        (datetime(2025, 2, 1), datetime(2025, 5, 1)): {
-                            'sp500_return': 1.8,
-                            'volatility': 1.2,
-                            'period_name': 'Q1 2025'
-                        },
-                        # Default/Custom period (for any other date range)
-                        ('default', 'default'): {
-                            'sp500_return': 2.0,  # typical quarterly return
-                            'volatility': 1.1,
-                            'period_name': 'Custom period'
-                        }
-                    }
+                    # Get S&P 500 data for the same period
+                    sp500 = yf.download('^GSPC', start=start_datetime, end=end_datetime)
                     
-                    # Find the closest matching period or use default
-                    selected_period = None
-                    for (period_start, period_end), conditions in market_conditions.items():
-                        if isinstance(period_start, str) and period_start == 'default':
-                            continue  # Skip the default entry when looking for matches
-                            
-                        if abs((period_start - start_datetime).days) <= 15 and abs((period_end - end_datetime).days) <= 15:
-                            selected_period = conditions
-                            break
+                    if sp500.empty:
+                        st.error("Could not retrieve S&P 500 data for the selected period")
+                        return
                     
-                    # Use default if no matching period
-                    if selected_period is None:
-                        selected_period = market_conditions[('default', 'default')]
-                        
-                        # Scale the default return based on the actual duration
-                        # A typical quarter is ~90 days
-                        selected_period['sp500_return'] = selected_period['sp500_return'] * (date_diff / 90.0)
-                        selected_period['period_name'] = f"Custom period ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})"
-                        
-                    # Get the S&P 500 return for the selected period
-                    sp500_return = selected_period['sp500_return']
-                    volatility = selected_period['volatility']
-                    period_name = selected_period['period_name']
+                    # Calculate S&P 500 return for the period
+                    sp500_start = sp500['Close'].iloc[0]
+                    sp500_end = sp500['Close'].iloc[-1]
+                    sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
+                    
+                    # Create a status container
+                    status_container = st.status("Calculating portfolio performance...")
                     
                     # Calculate returns for selected companies
                     company_returns = []
                     skipped_companies = []
                     
-                    # Create a status container
-                    status_container = st.status("Calculating portfolio performance...")
-                    
-                    # Use a simplified approach that doesn't rely on API calls
-                    # This prevents timeouts and speeds up the process
                     for idx, row in selected_companies.iterrows():
                         if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
                             skipped_companies.append(f"{row['company']} (No symbol available)")
@@ -655,31 +846,28 @@ def show_backtest(data):
                         # Update status message
                         status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
                         
-                        # Calculate performance based on ultimate strength
-                        # Companies with higher scores should generally outperform
-                        strength_factor = row['ultimate_strength'] / 10.0  # Normalize to 0-1 range
-                        
-                        # Companies with higher strength will tend to outperform the market
-                        # But with some variability to reflect real-world conditions
-                        # Base performance on S&P 500 plus premium for higher strength
-                        base_return = sp500_return * (0.8 + strength_factor * 0.6)
-                        
-                        # Add some variability (scaled by volatility factor)
-                        random_factor = random.uniform(-1.5, 3.0) * volatility * (1 - strength_factor * 0.3)
-                        ret_pct = base_return + random_factor
-                        
-                        # Reasonable stock prices for the period
-                        start_price = random.uniform(50, 200)
-                        end_price = start_price * (1 + ret_pct/100)
-                        
-                        company_returns.append({
-                            'company': row['company'],
-                            'symbol': row['symbol'],
-                            'return_pct': ret_pct,
-                            'start_price': start_price,
-                            'end_price': end_price,
-                            'strength': row['ultimate_strength']
-                        })
+                        try:
+                            # Get historical data for this stock
+                            stock_data = yf.download(row['symbol'], start=start_datetime, end=end_datetime)
+                            
+                            if not stock_data.empty and len(stock_data) > 1:
+                                # Calculate return
+                                start_price = stock_data['Close'].iloc[0]
+                                end_price = stock_data['Close'].iloc[-1]
+                                ret_pct = ((end_price - start_price) / start_price) * 100
+                                
+                                company_returns.append({
+                                    'company': row['company'],
+                                    'symbol': row['symbol'],
+                                    'return_pct': ret_pct,
+                                    'start_price': start_price,
+                                    'end_price': end_price,
+                                    'strength': row['ultimate_strength']
+                                })
+                            else:
+                                skipped_companies.append(f"{row['company']} (No data available)")
+                        except Exception as e:
+                            skipped_companies.append(f"{row['company']} (Error: {str(e)})")
                     
                     # Update final status
                     status_container.update(label="Backtest calculation complete!", state="complete")
@@ -690,7 +878,7 @@ def show_backtest(data):
                         portfolio_return = returns_df['return_pct'].mean()
                         
                         # Show summary
-                        st.subheader(f"Backtest Results ({period_name})")
+                        st.subheader(f"Backtest Results ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})")
                         
                         col1, col2, col3 = st.columns(3)
                         col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
@@ -719,7 +907,7 @@ def show_backtest(data):
                         st.subheader("Strength vs. Returns Correlation")
                         corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
                                              hover_data=['company', 'symbol'],
-                                             title="Ultimate Strength vs. Returns",
+                                             title="Ultimate Strength Score vs. Returns",
                                              labels={'strength': 'Ultimate Strength Score', 
                                                      'return_pct': 'Return (%)'})
                         # Add trendline
@@ -732,40 +920,18 @@ def show_backtest(data):
                         # Calculate correlation coefficient
                         correlation = returns_df['strength'].corr(returns_df['return_pct'])
                         st.write(f"**Correlation coefficient:** {correlation:.3f} (higher values indicate stronger relationship between strength scores and returns)")
+                        
+                        # Display skipped companies
+                        if skipped_companies:
+                            st.subheader("Skipped Companies")
+                            for company in skipped_companies:
+                                st.write(f"- {company}")
                     else:
                         st.warning("No return data available for the selected companies.")
                 except Exception as e:
                     st.error(f"Error during backtest: {str(e)}")
         else:
             st.warning("No companies match the selected criteria.")
-    
-    st.info("""
-    **How the Backtest Works**:
-    
-    1. Select a start date and an end date for your test period
-    2. Choose a minimum Ultimate Strength Score to filter companies
-    3. The backtest assumes investing equally in all companies with scores above your threshold
-    4. Performance is modeled based on market data patterns and the ultimate strength scores
-    5. Returns are compared against the S&P 500 benchmark for the same period
-    
-    This backtest is for educational purposes only and past performance is not indicative of future results.
-    """)
-    
-    # Information about the methodology
-    with st.expander("ℹ️ About Backtest Methodology"):
-        st.markdown("""
-        This backtest uses a model-based approach that:
-        
-        * Uses the Ultimate Strength score as a predictor of relative performance
-        * Incorporates market data for different time periods
-        * Adjusts returns and volatility based on the selected date range
-        * Shows the statistical relationship between strength scores and returns
-        
-        The backtest allows you to evaluate the potential predictive power of the Ultimate Strength score
-        by demonstrating how a portfolio of higher-scored companies would have performed in different market conditions.
-        """)
-
-
 
 def suggest_company():
     st.header("Suggest a Company for Analysis")
