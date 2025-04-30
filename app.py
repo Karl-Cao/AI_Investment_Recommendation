@@ -5,28 +5,16 @@ import pandas as pd
 from anthropic import Anthropic
 import plotly.express as px
 import plotly.graph_objects as go
-import streamlit as st
+# Configure yfinance before importing streamlit
 import yfinance as yf
+# Set a fixed version in requirements.txt: yfinance==0.2.28
 from datetime import datetime, timedelta
-from pathlib import Path
 
-# Fix for yfinance cache directory issue
-try:
-    # Create a local cache directory that Streamlit can write to
-    CACHE_DIR = ".cache"
-    
-    # Create the cache dir if it doesn't exist
-    Path(CACHE_DIR).mkdir(exist_ok=True)
-    
-    # Configure yfinance to use our cache directory
-    yf.set_tz_cache_location(CACHE_DIR)
-    
-    # Alternative approach if needed:
-    # import os
-    # os.environ["PYTHONPATH"] = CACHE_DIR
-    
-except Exception as e:
-    st.warning(f"Could not configure yfinance cache directory: {str(e)}")
+# Import streamlit after yfinance is configured
+import streamlit as st
+
+# Must be the first streamlit command
+st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
@@ -780,7 +768,7 @@ def suggest_company():
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
 def main():
-    st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
+    # st.set_page_config is moved to the top of the file
     
     # Add disclaimer banner
     st.warning("⚠️ **DISCLAIMER:** This application is for educational purposes only. The investment analysis and recommendations provided should not be construed as financial advice. Always consult with a qualified financial advisor before making investment decisions.")
