@@ -7,6 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+from datetime import datetime, timedelta
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
@@ -50,10 +51,11 @@ class InvestmentChatbot:
         context = self.prepare_context(data, query)
         
         # Include previous conversation context
+        # Increased from 5 to 15 messages for better conversation memory
         messages = []
         if 'messages' in st.session_state:
-            # Get last 5 messages for context (adjust number as needed)
-            recent_messages = st.session_state.messages[-5:]
+            # Get last 15 messages for context
+            recent_messages = st.session_state.messages[-15:]
             for msg in recent_messages:
                 messages.append({
                     "role": msg["role"],
@@ -68,9 +70,9 @@ class InvestmentChatbot:
         
         try:
             response = anthropic.messages.create(
-                model="claude-3-5-sonnet-latest",
+                model="claude-3-7-sonnet-20250219",  # Updated to Claude 3.7 Sonnet
                 system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
-                max_tokens=1024,
+                max_tokens=2048,  # Increased token limit for more detailed responses
                 messages=messages
             )
             
@@ -333,6 +335,10 @@ def navigate_to_sector(sector_name):
     st.session_state.active_tab = "Sector Trends"
     st.rerun()
 
+def navigate_to_backtest():
+    st.session_state.active_tab = "Backtest"
+    st.rerun()
+
 def show_overview(data):
     st.header("Investment Analysis Overview")
 
@@ -492,7 +498,6 @@ def display_company_info(company_data, company_name, full_data):
         else:
             st.write("**Last Reported:** No data available")
 
-    # Rest of your display code remains the same...
     # Company details
     col1, col2 = st.columns(2)
 
@@ -582,6 +587,113 @@ def show_sector_trends(data):
             if st.button(f"📊 View {company} Analysis", key=f"sector_company_{company}"):
                 navigate_to_company(company)
 
+def show_backtest(data):
+    st.header("Investment Strategy Backtest")
+    
+    # Create a DataFrame from the company analysis data
+    df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
+    df['company'] = df.index
+    
+    # Get company symbols
+    symbols = []
+    for company in df['company']:
+        symbol = data['company_analysis'][company].get('symbols', '').split(',')[0].strip()
+        symbols.append(symbol if symbol else None)
+    df['symbol'] = symbols
+    
+    # Remove companies without symbols
+    df = df[df['symbol'].notna()]
+    
+    # Parameters for backtesting
+    st.subheader("Backtest Parameters")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        start_date = st.date_input("Start Date", datetime(2024, 11, 1))
+    
+    with col2:
+        end_date = st.date_input("End Date", datetime(2025, 1, 31))  # Approximately 3 months later
+    
+    # Select strategy based on ultimate strength
+    st.subheader("Select Investment Strategy")
+    
+    min_score = st.slider("Minimum Ultimate Strength Score", 
+                         min_value=float(df['ultimate_strength'].min()), 
+                         max_value=float(df['ultimate_strength'].max()),
+                         value=7.0)
+    
+    # Filter companies based on selected strategy
+    selected_companies = df[df['ultimate_strength'] >= min_score]
+    
+    if st.button("Run Backtest"):
+        if not selected_companies.empty:
+            with st.spinner("Running backtest..."):
+                # Get S&P 500 performance for the same period
+                sp500 = yf.download('^GSPC', start=start_date, end=end_date)
+                sp500_return = (sp500['Close'].iloc[-1] / sp500['Close'].iloc[0] - 1) * 100
+                
+                # Calculate returns for selected companies
+                company_returns = []
+                for _, row in selected_companies.iterrows():
+                    try:
+                        stock_data = yf.download(row['symbol'], start=start_date, end=end_date)
+                        if not stock_data.empty:
+                            start_price = stock_data['Close'].iloc[0]
+                            end_price = stock_data['Close'].iloc[-1]
+                            ret_pct = (end_price / start_price - 1) * 100
+                            company_returns.append({
+                                'company': row['company'],
+                                'symbol': row['symbol'],
+                                'return_pct': ret_pct,
+                                'start_price': start_price,
+                                'end_price': end_price,
+                                'strength': row['ultimate_strength']
+                            })
+                    except Exception as e:
+                        st.error(f"Error getting data for {row['symbol']}: {str(e)}")
+                
+                # Display results
+                if company_returns:
+                    returns_df = pd.DataFrame(company_returns)
+                    portfolio_return = returns_df['return_pct'].mean()
+                    
+                    # Show summary
+                    st.subheader("Backtest Results")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
+                    col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
+                    col3.metric("Outperformance", f"{portfolio_return - sp500_return:.2f}%", 
+                               f"{portfolio_return - sp500_return:.2f}%")
+                    
+                    # Plot returns
+                    fig = px.bar(returns_df, x='company', y='return_pct', 
+                                title="Individual Company Returns",
+                                labels={'return_pct': 'Return (%)', 'company': 'Company'})
+                    fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
+                                 annotation_text="S&P 500 Return")
+                    fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
+                                 annotation_text="Portfolio Average Return")
+                    st.plotly_chart(fig)
+                    
+                    # Show detailed company results
+                    st.subheader("Detailed Results")
+                    returns_df = returns_df.sort_values(by='return_pct', ascending=False)
+                    st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
+                else:
+                    st.warning("No return data available for the selected companies.")
+        else:
+            st.warning("No companies match the selected criteria.")
+    
+    st.info("""
+    **How the Backtest Works**:
+    
+    1. Select a start date (default: November 1, 2024)
+    2. Select an end date (default: 3 months later)
+    3. Choose a minimum Ultimate Strength Score to filter companies
+    4. The backtest simulates investing equally in all companies with scores above your threshold
+    5. Returns are compared against the S&P 500 benchmark for the same period
+    """)
+
 def suggest_company():
     st.header("Suggest a Company for Analysis")
     suggested_company = st.text_input("Enter the name or symbol of a company that you think should be analyzed")
@@ -591,6 +703,9 @@ def suggest_company():
 
 def main():
     st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
+    
+    # Add disclaimer banner
+    st.warning("⚠️ **DISCLAIMER:** This application is for educational purposes only. The investment analysis and recommendations provided should not be construed as financial advice. Always consult with a qualified financial advisor before making investment decisions.")
     
     # Initialize session states
     if 'selected_company' not in st.session_state:
@@ -614,6 +729,7 @@ def main():
         "Overview": "📊 Market Overview",
         "Company Analysis": "🏢 Company Analysis",
         "Sector Trends": "📈 Sector Trends",
+        "Backtest": "📉 Strategy Backtest", # Added new navigation option
         "Suggest a Company": "💡 Suggest a Company"
     }
     
@@ -629,6 +745,7 @@ def main():
         - Compare investment opportunities
         - Track market trends and sectors
         - Get real-time stock insights
+        - Backtest investment strategies
         
         Simply ask questions in natural language!
         """)
@@ -637,7 +754,7 @@ def main():
     if st.session_state.active_tab == "Chat":
         # Welcome message for first-time visitors
         if st.session_state.first_visit:
-            st.snow()  # Add a fun welcome effect
+            # Removed st.snow() effect
             col1, col2, col3 = st.columns([1,2,1])
             with col2:
                 st.success("""
@@ -687,6 +804,8 @@ def main():
         show_company_analysis(data, sp500_companies)
     elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
+    elif st.session_state.active_tab == "Backtest":
+        show_backtest(data)
     elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
