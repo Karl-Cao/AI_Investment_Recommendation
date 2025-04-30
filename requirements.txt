@@ -5,3 +5,4 @@ plotly
 yfinance
 anthropic
 python-dotenv
+pandas_datareader
