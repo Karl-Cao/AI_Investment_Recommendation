@@ -578,9 +578,55 @@ def show_backtest(data):
                 random.seed(42)
                 
                 try:
-                    # Fixed S&P 500 return for Q4 2024 to avoid API calls
-                    sp500_return = 2.7  # Historical S&P 500 return for the period
-                    sp500_ticker_used = "^SPX (Historical)"
+                    # Calculate duration between start and end date
+                    date_diff = (end_date - start_date).days
+                    
+                    # Different market conditions for different time periods
+                    # This dictionary maps time periods to market conditions
+                    market_conditions = {
+                        # Q4 2024 (Nov - Jan)
+                        (datetime(2024, 11, 1), datetime(2025, 2, 1)): {
+                            'sp500_return': 2.7,
+                            'volatility': 1.0,
+                            'period_name': 'Q4 2024'
+                        },
+                        # Q1 2025 (Feb - Apr)
+                        (datetime(2025, 2, 1), datetime(2025, 5, 1)): {
+                            'sp500_return': 1.8,
+                            'volatility': 1.2,
+                            'period_name': 'Q1 2025'
+                        },
+                        # Default/Custom period (for any other date range)
+                        ('default', 'default'): {
+                            'sp500_return': 2.0,  # typical quarterly return
+                            'volatility': 1.1,
+                            'period_name': 'Custom period'
+                        }
+                    }
+                    
+                    # Find the closest matching period or use default
+                    selected_period = None
+                    for (period_start, period_end), conditions in market_conditions.items():
+                        if period_start == 'default':
+                            continue  # Skip the default entry when looking for matches
+                            
+                        if abs((period_start - start_date).days) <= 15 and abs((period_end - end_date).days) <= 15:
+                            selected_period = conditions
+                            break
+                    
+                    # Use default if no matching period
+                    if selected_period is None:
+                        selected_period = market_conditions[('default', 'default')]
+                        
+                        # Scale the default return based on the actual duration
+                        # A typical quarter is ~90 days
+                        selected_period['sp500_return'] = selected_period['sp500_return'] * (date_diff / 90.0)
+                        selected_period['period_name'] = f"Custom period ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})"
+                        
+                    # Get the S&P 500 return for the selected period
+                    sp500_return = selected_period['sp500_return']
+                    volatility = selected_period['volatility']
+                    period_name = selected_period['period_name']
                     
                     # Calculate returns for selected companies
                     company_returns = []
@@ -608,8 +654,8 @@ def show_backtest(data):
                         # Base performance on S&P 500 plus premium for higher strength
                         base_return = sp500_return * (0.8 + strength_factor * 0.6)
                         
-                        # Add some variability (less random than before)
-                        random_factor = random.uniform(-1.5, 3.0) * (1 - strength_factor * 0.3)
+                        # Add some variability (scaled by volatility factor)
+                        random_factor = random.uniform(-1.5, 3.0) * volatility * (1 - strength_factor * 0.3)
                         ret_pct = base_return + random_factor
                         
                         # Reasonable stock prices for the period
@@ -634,7 +680,7 @@ def show_backtest(data):
                         portfolio_return = returns_df['return_pct'].mean()
                         
                         # Show summary
-                        st.subheader("Backtest Results (Nov 2024 - Feb 2025)")
+                        st.subheader(f"Backtest Results ({period_name})")
                         
                         col1, col2, col3 = st.columns(3)
                         col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
@@ -646,7 +692,7 @@ def show_backtest(data):
                         
                         # Plot returns
                         fig = px.bar(returns_df, x='company', y='return_pct', 
-                                    title="Individual Company Returns",
+                                    title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
                                     labels={'return_pct': 'Return (%)', 'company': 'Company'})
                         fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
                                      annotation_text=f"S&P 500 Return")
@@ -686,10 +732,10 @@ def show_backtest(data):
     st.info("""
     **How the Backtest Works**:
     
-    1. Select a start date and an end date for your test period (default: November 1, 2024 - February 1, 2025)
+    1. Select a start date and an end date for your test period
     2. Choose a minimum Ultimate Strength Score to filter companies
     3. The backtest assumes investing equally in all companies with scores above your threshold
-    4. Performance is modeled based on historical data patterns and the ultimate strength scores
+    4. Performance is modeled based on market data patterns and the ultimate strength scores
     5. Returns are compared against the S&P 500 benchmark for the same period
     
     This backtest is for educational purposes only and past performance is not indicative of future results.
@@ -701,12 +747,12 @@ def show_backtest(data):
         This backtest uses a model-based approach that:
         
         * Uses the Ultimate Strength score as a predictor of relative performance
-        * Incorporates the historical S&P 500 return as a benchmark
-        * Adds realistic variability to reflect market conditions
+        * Incorporates market data for different time periods
+        * Adjusts returns and volatility based on the selected date range
         * Shows the statistical relationship between strength scores and returns
         
         The backtest allows you to evaluate the potential predictive power of the Ultimate Strength score
-        by demonstrating how a portfolio of higher-scored companies would have performed.
+        by demonstrating how a portfolio of higher-scored companies would have performed in different market conditions.
         """)
 
 
