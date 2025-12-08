@@ -8,8 +8,12 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
-# Initialize Anthropic client
-anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+# Lazy initialize Anthropic client
+def get_anthropic_client():
+    """Initialize Anthropic client on first use"""
+    if 'anthropic_client' not in st.session_state:
+        st.session_state.anthropic_client = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+    return st.session_state.anthropic_client
 
 class InvestmentChatbot:
     def __init__(self):
@@ -68,6 +72,7 @@ class InvestmentChatbot:
 
         try:
             # Use streaming for real-time response
+            anthropic = get_anthropic_client()
             with anthropic.messages.stream(
                 model="claude-3-5-sonnet-latest",
                 system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
