@@ -9,3 +9,7 @@ numpy>=2.3.5
 # Additional dependencies
 python-dateutil>=2.9.0
 pytz>=2025.2
+python-dotenv
+pandas_datareader
+statsmodels
+lxml
