@@ -858,6 +858,243 @@ def show_backtest_results():
                 - Best Single Stock: **{max([max([s['return_pct'] for s in d['stocks']]) for d in score_results.values()]):+.2f}%**
                 """)
 
+def show_quarterly_breakdown():
+    """Show quarterly performance breakdown of October 2024 recommendations"""
+    st.header("📅 Quarterly Performance Breakdown")
+    st.write("**How did October 2024 recommendations perform quarter by quarter over 14 months?**")
+
+    st.info("""
+    **Key Question:** Do recommendations become "stale" and underperform as time passes?
+
+    This analysis tests 4 different strategies using the October 2024 AI recommendations across 5 quarters:
+    - Q4 2024 (Oct-Dec 2024)
+    - Q1 2025 (Jan-Mar 2025)
+    - Q2 2025 (Apr-Jun 2025)
+    - Q3 2025 (Jul-Sep 2025)
+    - Q4 2025 (Oct-Dec 2025) - Current
+    """)
+
+    # Hardcode the results from our quarterly_breakdown.py analysis
+    quarters = ['Q4 2024', 'Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025']
+
+    strategies = {
+        'Traditional Invest (9.0-10.0)': {
+            'returns': [10.50, -11.66, 23.29, 5.39, -2.98],
+            'vs_nasdaq': [1.69, -1.51, 7.11, -6.44, -6.59],
+            'win': [True, False, True, False, False],
+            'final_value': 12305.06,
+            'total_return': 23.05
+        },
+        'Sweet Spot (8.0-8.99)': {
+            'returns': [1.01, -3.49, 7.92, 3.31, 0.64],
+            'vs_nasdaq': [-7.80, 6.66, -8.26, -8.51, -2.98],
+            'win': [False, True, False, False, False],
+            'final_value': 10937.80,
+            'total_return': 9.38
+        },
+        'Semiconductor Equipment (8.0-8.99)': {
+            'returns': [-10.86, -9.80, 25.04, 28.11, 21.20],
+            'vs_nasdaq': [-19.66, 0.35, 8.86, 16.29, 17.58],
+            'win': [False, True, True, True, True],
+            'final_value': 15611.15,
+            'total_return': 56.11
+        },
+        'Top 3 Sectors (Diversified)': {
+            'returns': [35.16, 19.45, 52.85, 37.18, 28.59],
+            'vs_nasdaq': [26.36, 29.60, 36.67, 25.36, 24.98],
+            'win': [True, True, True, True, True],
+            'final_value': 43531.10,
+            'total_return': 335.31
+        }
+    }
+
+    nasdaq_returns = [8.80, -10.15, 16.18, 11.82, 3.62]
+    nasdaq_final = 13159.02
+
+    # Summary metrics at top
+    st.subheader("🏆 Overall Performance Summary")
+
+    cols = st.columns(4)
+    for idx, (strategy_name, data) in enumerate(strategies.items()):
+        with cols[idx]:
+            win_rate = sum(data['win']) / len(data['win']) * 100
+            delta_color = "normal" if data['final_value'] > nasdaq_final else "inverse"
+
+            st.metric(
+                strategy_name.split('(')[0].strip(),
+                f"${data['final_value']:,.0f}",
+                f"{data['total_return']:+.1f}%",
+                delta_color=delta_color
+            )
+            st.caption(f"Win Rate: {win_rate:.0f}%")
+
+    st.caption(f"**NASDAQ Benchmark:** ${nasdaq_final:,.0f} (+31.59%)")
+
+    # Quarterly performance chart
+    st.divider()
+    st.subheader("📊 Quarterly Returns Comparison")
+
+    fig = go.Figure()
+
+    for strategy_name, data in strategies.items():
+        fig.add_trace(go.Scatter(
+            x=quarters,
+            y=data['returns'],
+            mode='lines+markers',
+            name=strategy_name,
+            line=dict(width=3),
+            marker=dict(size=10)
+        ))
+
+    # Add NASDAQ line
+    fig.add_trace(go.Scatter(
+        x=quarters,
+        y=nasdaq_returns,
+        mode='lines+markers',
+        name='NASDAQ',
+        line=dict(width=3, dash='dash', color='gray'),
+        marker=dict(size=10, symbol='diamond')
+    ))
+
+    fig.update_layout(
+        title="Quarterly Returns: Oct 2024 Recommendations vs NASDAQ",
+        xaxis_title="Quarter",
+        yaxis_title="Return (%)",
+        height=500,
+        hovermode='x unified',
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Win/Loss table
+    st.divider()
+    st.subheader("✅ Quarter-by-Quarter Win/Loss Record")
+
+    for strategy_name, data in strategies.items():
+        with st.expander(f"{strategy_name} - {sum(data['win'])}/5 Quarters Won"):
+            cols = st.columns(5)
+            for idx, quarter in enumerate(quarters):
+                with cols[idx]:
+                    status = "✅ WIN" if data['win'][idx] else "❌ LOSE"
+                    st.metric(
+                        quarter,
+                        f"{data['returns'][idx]:+.1f}%",
+                        f"{data['vs_nasdaq'][idx]:+.1f}% vs NASDAQ"
+                    )
+                    st.write(status)
+
+    # Key insights
+    st.divider()
+    st.subheader("🎯 Key Insights")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.success("""
+        **🏆 Winner: Top 3 Sectors (Diversified)**
+        - **100% Win Rate** - Beat NASDAQ every single quarter!
+        - Turned $10,000 → **$43,531** (+335%)
+        - NASDAQ only: $10,000 → $13,159 (+32%)
+        - **Outperformed by +303%!**
+
+        **Strategy:** Dynamically select top 3 winning sectors each quarter
+        """)
+
+        st.info("""
+        **Semiconductor Equipment (8.0-8.99)**
+        - **80% Win Rate** - Beat NASDAQ in 4 out of 5 quarters
+        - Turned $10,000 → **$15,611** (+56%)
+        - Strong focused sector bet
+        """)
+
+    with col2:
+        st.warning("""
+        **⚠️ Traditional Invest (9.0-10.0)**
+        - **40% Win Rate** - Only beat NASDAQ 2 out of 5 quarters
+        - Turned $10,000 → $12,305 (+23%)
+        - **Underperformed NASDAQ** (-8.5%)
+        - The "best" scores don't always win!
+        """)
+
+        st.warning("""
+        **⚠️ Sweet Spot (8.0-8.99)**
+        - **20% Win Rate** - Only beat NASDAQ 1 out of 5 quarters
+        - Turned $10,000 → $10,938 (+9%)
+        - **Significantly underperformed** (-22%)
+        - Too broad/diversified
+        """)
+
+    # Performance degradation analysis
+    st.divider()
+    st.subheader("📉 Did Performance Degrade Over Time?")
+
+    st.write("""
+    **Hypothesis:** As recommendations get "stale", performance should worsen.
+
+    **Result:** Performance actually **IMPROVED** over time for all strategies!
+    """)
+
+    degradation_data = {
+        'Strategy': [],
+        'Early (Q4 2024 - Q1 2025)': [],
+        'Late (Q2 2025 - Q4 2025)': [],
+        'Change': [],
+        'Trend': []
+    }
+
+    for strategy_name, data in strategies.items():
+        early_avg = (data['returns'][0] + data['returns'][1]) / 2
+        late_avg = (data['returns'][2] + data['returns'][3] + data['returns'][4]) / 3
+        change = late_avg - early_avg
+
+        degradation_data['Strategy'].append(strategy_name)
+        degradation_data['Early (Q4 2024 - Q1 2025)'].append(f"{early_avg:+.1f}%")
+        degradation_data['Late (Q2 2025 - Q4 2025)'].append(f"{late_avg:+.1f}%")
+        degradation_data['Change'].append(f"{change:+.1f}%")
+        degradation_data['Trend'].append("✅ Improved" if change > 0 else "❌ Degraded")
+
+    df = pd.DataFrame(degradation_data)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.info("""
+    **Conclusion:** Performance did NOT degrade as recommendations aged. This suggests:
+    1. The October 2024 AI analysis identified fundamentally strong companies
+    2. Sector rotation (Top 3 strategy) captures market dynamics better than static holdings
+    3. Quarterly rebalancing with dynamic sector selection is the winning approach
+    """)
+
+    # Recommendations
+    st.divider()
+    st.subheader("💡 Recommendations")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.success("""
+        **✅ DO THIS:**
+        - Implement "Top 3 Sectors" strategy
+        - Rebalance quarterly based on current data
+        - Focus on sector rotation, not static stocks
+        """)
+
+    with col2:
+        st.warning("""
+        **⚠️ AVOID THIS:**
+        - Don't rely on "Excellent 9.0-10.0" scores alone
+        - Don't over-diversify (Sweet Spot 8.0-8.99)
+        - Don't hold static recommendations > 3 months
+        """)
+
+    with col3:
+        st.info("""
+        **📅 NEXT STEPS:**
+        1. Re-run AI analysis with Dec 2025 data
+        2. Identify current top 3 sectors
+        3. Build quarterly rebalancing system
+        4. Automate sector selection
+        """)
+
 def main():
     st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
     
@@ -884,6 +1121,7 @@ def main():
         "Company Analysis": "🏢 Company Analysis",
         "Sector Trends": "📈 Sector Trends",
         "Backtest": "🔬 Backtest Performance",
+        "Quarterly Analysis": "📅 Quarterly Breakdown",
         "Suggest a Company": "💡 Suggest a Company"
     }
     
@@ -959,6 +1197,8 @@ def main():
         show_sector_trends(data)
     elif st.session_state.active_tab == "Backtest":
         show_backtest_results()
+    elif st.session_state.active_tab == "Quarterly Analysis":
+        show_quarterly_breakdown()
     elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
