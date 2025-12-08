@@ -2,13 +2,13 @@
 streamlit>=1.52.1
 anthropic>=0.75.0
 yfinance>=0.2.66
-pandas>=2.3.3
+pandas>=2.0.0
 plotly>=6.5.0
-numpy>=2.3.5
+numpy>=1.24.0
 
 # Additional dependencies
-python-dateutil>=2.9.0
-pytz>=2025.2
+python-dateutil>=2.8.0
+pytz>=2023.0
 python-dotenv
 pandas_datareader
 statsmodels
