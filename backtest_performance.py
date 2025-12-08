@@ -13,12 +13,12 @@ if sys.platform.startswith('win'):
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 class PortfolioBacktest:
-    def __init__(self, start_date='2024-10-01', end_date=None):
+    def __init__(self, start_date='2024-12-01', end_date=None):
         """
         Initialize the backtesting class
 
         Args:
-            start_date: When the analysis was done (default: 2024-10-01)
+            start_date: When the analysis was done (default: 2024-12-01)
             end_date: End date for comparison (default: today)
         """
         self.start_date = start_date
@@ -430,7 +430,7 @@ class PortfolioBacktest:
 
 def main():
     # Create backtester
-    backtester = PortfolioBacktest(start_date='2024-10-01')
+    backtester = PortfolioBacktest(start_date='2024-12-01')
 
     # Generate report
     results = backtester.generate_report()

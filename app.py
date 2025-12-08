@@ -589,7 +589,7 @@ def suggest_company():
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
 @st.cache_data(ttl=3600)
-def run_backtest(start_date='2024-10-01'):
+def run_backtest(start_date='2024-12-01'):
     """Run portfolio backtest and return results"""
     from backtest_performance import PortfolioBacktest
 
@@ -621,7 +621,7 @@ def show_backtest_results():
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Analysis Start Date",
-                                   value=pd.to_datetime('2024-10-01'),
+                                   value=pd.to_datetime('2024-12-01'),
                                    max_value=pd.to_datetime('today'))
 
     start_date_str = start_date.strftime('%Y-%m-%d')
