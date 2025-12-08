@@ -589,7 +589,7 @@ def suggest_company():
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
 @st.cache_data(ttl=3600)
-def run_backtest(start_date='2024-12-01'):
+def run_backtest(start_date='2024-10-01'):
     """Run portfolio backtest and return results"""
     from backtest_performance import PortfolioBacktest
 
@@ -617,11 +617,14 @@ def show_backtest_results():
     st.header("📊 Backtest Performance Analysis")
     st.write("Compare portfolio performance based on AI recommendations vs NASDAQ index")
 
+    # Important note about analysis date
+    st.warning("⚠️ **Note:** AI analysis was performed in **October 2024**. The recommendations are now 14 months old. For best results, re-run the AI analysis with current 2025 data.")
+
     # Date selector
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Analysis Start Date",
-                                   value=pd.to_datetime('2024-12-01'),
+                                   value=pd.to_datetime('2024-10-01'),
                                    max_value=pd.to_datetime('today'))
 
     start_date_str = start_date.strftime('%Y-%m-%d')
