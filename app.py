@@ -709,7 +709,7 @@ def show_backtest_results():
             showlegend=False
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="wide")
 
         # Detailed table
         st.subheader("Detailed Score Analysis")
@@ -745,7 +745,7 @@ def show_backtest_results():
                     for s in sorted_stocks[:5]
                 ])
 
-                st.dataframe(top_df, use_container_width=True, hide_index=True)
+                st.dataframe(top_df, width="wide", hide_index=True)
 
     st.divider()
 
@@ -972,7 +972,7 @@ def show_quarterly_breakdown():
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="wide")
 
     # Win/Loss table
     st.divider()
@@ -1062,7 +1062,7 @@ def show_quarterly_breakdown():
         degradation_data['Trend'].append("✅ Improved" if change > 0 else "❌ Degraded")
 
     df = pd.DataFrame(degradation_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="wide", hide_index=True)
 
     st.info("""
     **Conclusion:** Performance did NOT degrade as recommendations aged. This suggests:
