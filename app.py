@@ -48,7 +48,7 @@ class InvestmentChatbot:
 
     def get_response(self, query, data):
         context = self.prepare_context(data, query)
-        
+
         # Include previous conversation context
         messages = []
         if 'messages' in st.session_state:
@@ -59,26 +59,25 @@ class InvestmentChatbot:
                     "role": msg["role"],
                     "content": msg["content"]
                 })
-        
+
         # Add current query
         messages.append({
             "role": "user",
             "content": query
         })
-        
+
         try:
-            response = anthropic.messages.create(
+            # Use streaming for real-time response
+            with anthropic.messages.stream(
                 model="claude-3-5-sonnet-latest",
                 system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
                 max_tokens=1024,
                 messages=messages
-            )
-            
-            # Handle the response properly
-            return self.extract_response_content(response)
+            ) as stream:
+                return stream
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
-            return "I apologize, but I encountered an error. Could you please rephrase your question?"
+            return None
 
     def extract_response_content(self, response):
         """Extract the text content from the response object"""
@@ -194,27 +193,22 @@ def add_chatbot_interface(data):
         
         # Get and display assistant response
         with st.chat_message("assistant"):
-            response = chatbot.get_response(prompt, data)
-            
-            # Handle response formatting
-            if isinstance(response, list):
-                response_parts = []
-                for item in response:
-                    if hasattr(item, 'text'):
-                        response_parts.append(item.text)
-                    elif isinstance(item, dict) and 'text' in item:
-                        response_parts.append(item['text'])
-                    else:
-                        response_parts.append(str(item))
-                response = ' '.join(response_parts)
-            elif hasattr(response, 'text'):
-                response = response.text
-            elif isinstance(response, dict) and 'text' in response:
-                response = response['text']
-            
-            # Display formatted response with links
-            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
-            st.markdown(linked_response)
+            stream = chatbot.get_response(prompt, data)
+
+            if stream is None:
+                response = "I apologize, but I encountered an error. Could you please rephrase your question?"
+                st.markdown(response)
+            else:
+                # Create placeholder for streaming response
+                response_placeholder = st.empty()
+                response = ""
+
+                # Stream the response token by token
+                for text in stream.text_stream:
+                    response += text
+                    # Update the display with bold symbols
+                    linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
+                    response_placeholder.markdown(linked_response)
             
             # Extract symbols from the response
             symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
@@ -589,6 +583,188 @@ def suggest_company():
     if suggested_company:
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
+@st.cache_data(ttl=3600)
+def run_backtest(start_date='2024-10-01'):
+    """Run portfolio backtest and return results"""
+    from backtest_performance import PortfolioBacktest
+
+    backtester = PortfolioBacktest(start_date=start_date)
+    data, combined_df = backtester.load_company_data()
+
+    # Get NASDAQ benchmark
+    nasdaq = backtester.get_nasdaq_returns()
+
+    # Get results by score and recommendation
+    score_results = backtester.calculate_portfolio_by_score(data, combined_df)
+    rec_results = backtester.calculate_recommendation_performance(data, combined_df)
+
+    return {
+        'nasdaq': nasdaq,
+        'by_score': score_results,
+        'by_recommendation': rec_results,
+        'start_date': start_date,
+        'end_date': backtester.end_date
+    }
+
+def show_backtest_results():
+    st.header("📊 Backtest Performance Analysis")
+    st.write("Compare portfolio performance based on AI recommendations vs NASDAQ index")
+
+    # Date selector
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Analysis Start Date",
+                                   value=pd.to_datetime('2024-10-01'),
+                                   max_value=pd.to_datetime('today'))
+
+    start_date_str = start_date.strftime('%Y-%m-%d')
+
+    with st.spinner('Running backtest analysis... This may take a minute...'):
+        try:
+            results = run_backtest(start_date=start_date_str)
+        except Exception as e:
+            st.error(f"Error running backtest: {str(e)}")
+            return
+
+    nasdaq = results['nasdaq']
+    score_results = results['by_score']
+    rec_results = results['by_recommendation']
+
+    # Display period
+    st.info(f"**Analysis Period:** {results['start_date']} to {results['end_date']}")
+
+    # Benchmark Performance
+    st.subheader("🏆 Benchmark Performance")
+    if nasdaq:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("NASDAQ Index", "^IXIC")
+        col2.metric("Starting Price", f"${nasdaq['start_price']:,.2f}")
+        col3.metric("Total Return", f"{nasdaq['return_pct']:+.2f}%",
+                   delta=f"${nasdaq['end_price'] - nasdaq['start_price']:,.2f}")
+
+    st.divider()
+
+    # Performance by Score
+    st.subheader("📈 Performance by Ultimate Strength Score")
+
+    if score_results:
+        # Create comparison chart
+        score_labels = []
+        score_returns = []
+        num_stocks = []
+
+        for label, data in score_results.items():
+            score_labels.append(label)
+            score_returns.append(data['avg_return'])
+            num_stocks.append(data['num_stocks'])
+
+        fig = go.Figure()
+
+        fig.add_trace(go.Bar(
+            name='Average Return',
+            x=score_labels,
+            y=score_returns,
+            marker_color=['green' if r > nasdaq['return_pct'] else 'red' for r in score_returns],
+            text=[f"{r:+.2f}%" for r in score_returns],
+            textposition='outside',
+        ))
+
+        # Add NASDAQ benchmark line
+        fig.add_hline(y=nasdaq['return_pct'], line_dash="dash", line_color="blue",
+                     annotation_text=f"NASDAQ: {nasdaq['return_pct']:.2f}%",
+                     annotation_position="right")
+
+        fig.update_layout(
+            title="Portfolio Returns by Ultimate Strength Score",
+            xaxis_title="Score Range",
+            yaxis_title="Return (%)",
+            height=500,
+            showlegend=False
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Detailed table
+        st.subheader("Detailed Score Analysis")
+
+        for label, data in score_results.items():
+            with st.expander(f"{label} - Avg Return: {data['avg_return']:+.2f}%"):
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Stocks Analyzed", f"{data['num_stocks']}/{data['total_companies']}")
+                col2.metric("Average Return", f"{data['avg_return']:+.2f}%")
+                col3.metric("Best Return", f"{data['best_return']:+.2f}%")
+                col4.metric("Worst Return", f"{data['worst_return']:+.2f}%")
+
+                outperformance = data['avg_return'] - nasdaq['return_pct']
+                if outperformance > 0:
+                    st.success(f"✅ Outperformed NASDAQ by {outperformance:+.2f}%")
+                else:
+                    st.warning(f"⚠️ Underperformed NASDAQ by {abs(outperformance):.2f}%")
+
+                # Top performers
+                st.write("**Top 5 Performers:**")
+                sorted_stocks = sorted(data['stocks'], key=lambda x: x['return_pct'], reverse=True)
+
+                top_df = pd.DataFrame([
+                    {
+                        'Symbol': s['symbol'],
+                        'Company': s['name'][:40],
+                        'Score': f"{s['score']:.1f}",
+                        'Return': f"{s['return_pct']:+.2f}%",
+                        'Start': f"${s['start_price']:.2f}",
+                        'End': f"${s['end_price']:.2f}"
+                    }
+                    for s in sorted_stocks[:5]
+                ])
+
+                st.dataframe(top_df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Performance by Recommendation
+    st.subheader("💡 Performance by Recommendation Type")
+
+    if rec_results:
+        cols = st.columns(len(rec_results))
+
+        for idx, (rec, data) in enumerate(rec_results.items()):
+            with cols[idx]:
+                delta_color = "normal" if data['avg_return'] > nasdaq['return_pct'] else "inverse"
+                st.metric(
+                    f"{rec}",
+                    f"{data['avg_return']:+.2f}%",
+                    delta=f"vs NASDAQ: {data['avg_return'] - nasdaq['return_pct']:+.2f}%",
+                    delta_color=delta_color
+                )
+                st.caption(f"{data['num_stocks']} stocks")
+
+    # Key insights
+    st.divider()
+    st.subheader("🎯 Key Insights")
+
+    if score_results:
+        best_score = max(score_results.items(), key=lambda x: x[1]['avg_return'])
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.success(f"""
+            **Best Performing Score Range:**
+            - {best_score[0]}
+            - Average Return: **{best_score[1]['avg_return']:+.2f}%**
+            - {best_score[1]['num_stocks']} stocks
+            - Outperformed NASDAQ by **{best_score[1]['avg_return'] - nasdaq['return_pct']:+.2f}%**
+            """)
+
+        with col2:
+            st.info(f"""
+            **Analysis Summary:**
+            - Analysis Period: {(pd.to_datetime(results['end_date']) - pd.to_datetime(results['start_date'])).days} days
+            - NASDAQ Return: **{nasdaq['return_pct']:+.2f}%**
+            - Total Stocks Analyzed: {sum(d['num_stocks'] for d in score_results.values())}
+            - Best Single Stock: **{max([max([s['return_pct'] for s in d['stocks']]) for d in score_results.values()]):+.2f}%**
+            """)
+
 def main():
     st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
     
@@ -614,6 +790,7 @@ def main():
         "Overview": "📊 Market Overview",
         "Company Analysis": "🏢 Company Analysis",
         "Sector Trends": "📈 Sector Trends",
+        "Backtest": "🔬 Backtest Performance",
         "Suggest a Company": "💡 Suggest a Company"
     }
     
@@ -687,6 +864,8 @@ def main():
         show_company_analysis(data, sp500_companies)
     elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
+    elif st.session_state.active_tab == "Backtest":
+        show_backtest_results()
     elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 

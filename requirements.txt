@@ -1,7 +1,11 @@
-streamlit
-pandas
-numpy
-plotly
-yfinance
-anthropic
-python-dotenv
+# Core dependencies
+streamlit>=1.52.1
+anthropic>=0.75.0
+yfinance>=0.2.66
+pandas>=2.3.3
+plotly>=6.5.0
+numpy>=2.3.5
+
+# Additional dependencies
+python-dateutil>=2.9.0
+pytz>=2025.2
