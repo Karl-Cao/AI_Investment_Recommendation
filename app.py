@@ -602,11 +602,13 @@ def run_backtest(start_date='2024-10-01'):
     # Get results by score and recommendation
     score_results = backtester.calculate_portfolio_by_score(data, combined_df)
     rec_results = backtester.calculate_recommendation_performance(data, combined_df)
+    sector_score_results = backtester.calculate_sector_score_performance(data, combined_df)
 
     return {
         'nasdaq': nasdaq,
         'by_score': score_results,
         'by_recommendation': rec_results,
+        'by_sector_score': sector_score_results,
         'start_date': start_date,
         'end_date': backtester.end_date
     }
@@ -742,6 +744,48 @@ def show_backtest_results():
                     delta_color=delta_color
                 )
                 st.caption(f"{data['num_stocks']} stocks")
+
+    # Sector + Score Analysis
+    st.divider()
+    st.subheader("🔍 Sector Performance by Score Range")
+    st.write("Identify which sectors performed best within each score tier - helps find winning combinations")
+
+    sector_score_results = results.get('by_sector_score', {})
+
+    if sector_score_results:
+        # Sort by average return
+        sorted_sector_scores = sorted(sector_score_results.items(), key=lambda x: x[1]['avg_return'], reverse=True)
+
+        # Show sectors that beat NASDAQ
+        winners = [(k, v) for k, v in sorted_sector_scores if v['avg_return'] > nasdaq['return_pct']]
+        losers = [(k, v) for k, v in sorted_sector_scores if v['avg_return'] <= nasdaq['return_pct']]
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.success(f"✅ **Beat NASDAQ ({len(winners)} sector-score combinations)**")
+            if winners:
+                for key, data in winners[:10]:  # Top 10
+                    with st.expander(f"{key}: {data['avg_return']:+.2f}% ({data['num_stocks']} stocks)"):
+                        st.write(f"**Average Return:** {data['avg_return']:+.2f}%")
+                        st.write(f"**vs NASDAQ:** {data['avg_return'] - nasdaq['return_pct']:+.2f}%")
+                        st.write(f"**Best Stock:** {data['best_return']:+.2f}%")
+                        st.write(f"**Worst Stock:** {data['worst_return']:+.2f}%")
+                        st.write(f"**Number of Stocks:** {data['num_stocks']}")
+
+                        # Show individual stocks
+                        if st.checkbox("Show stocks", key=f"show_{key}"):
+                            for stock in data['stocks']:
+                                st.write(f"- {stock['symbol']} ({stock['name'][:30]}): {stock['return_pct']:+.2f}%")
+
+        with col2:
+            st.warning(f"⚠️ **Underperformed NASDAQ ({len(losers)} sector-score combinations)**")
+            if losers:
+                for key, data in losers[:10]:  # Top 10 worst
+                    with st.expander(f"{key}: {data['avg_return']:+.2f}% ({data['num_stocks']} stocks)"):
+                        st.write(f"**Average Return:** {data['avg_return']:+.2f}%")
+                        st.write(f"**vs NASDAQ:** {data['avg_return'] - nasdaq['return_pct']:+.2f}%")
+                        st.write(f"**Number of Stocks:** {data['num_stocks']}")
 
     # Key insights
     st.divider()

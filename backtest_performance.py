@@ -76,13 +76,13 @@ class PortfolioBacktest:
         Returns:
             dict: Portfolio performance grouped by score ranges
         """
-        # Define score ranges
+        # Define score ranges (inclusive on both ends)
         score_ranges = [
-            (9, 10, "Excellent (9-10)"),
-            (8, 8.9, "Very Good (8-8.9)"),
-            (7, 7.9, "Good (7-7.9)"),
-            (6, 6.9, "Above Average (6-6.9)"),
-            (0, 5.9, "Average and Below (0-5.9)")
+            (9.0, 10.0, "Excellent (9.0-10.0)"),
+            (8.0, 8.99, "Very Good (8.0-8.99)"),
+            (7.0, 7.99, "Good (7.0-7.99)"),
+            (6.0, 6.99, "Above Average (6.0-6.99)"),
+            (0, 5.99, "Average and Below (0-5.99)")
         ]
 
         portfolio_results = {}
@@ -100,11 +100,13 @@ class PortfolioBacktest:
                     company_row = combined_df[combined_df['name'].str.lower() == company_name.lower()]
                     if not company_row.empty:
                         symbol = company_row.iloc[0]['symbol']
+                        industry = company_row.iloc[0].get('industry', 'Unknown')
                         companies_in_range.append({
                             'name': company_name,
                             'symbol': symbol,
                             'score': score,
-                            'recommendation': recommendation
+                            'recommendation': recommendation,
+                            'industry': industry
                         })
 
             # Calculate returns for this portfolio
@@ -180,6 +182,79 @@ class PortfolioBacktest:
                     }
 
         return results
+
+    def calculate_sector_score_performance(self, data, combined_df):
+        """
+        Calculate returns grouped by sector AND score range
+        This helps identify which sectors performed best within each score tier
+        """
+        # Collect all stocks with their sectors and scores
+        all_stocks = []
+
+        for company_name, details in data['company_analysis'].items():
+            score = details.get('ultimate_strength', 0)
+            company_row = combined_df[combined_df['name'].str.lower() == company_name.lower()]
+
+            if not company_row.empty:
+                symbol = company_row.iloc[0]['symbol']
+                industry = company_row.iloc[0].get('industry', 'Unknown')
+
+                result = self.get_stock_returns(symbol, self.start_date, self.end_date)
+                if result:
+                    all_stocks.append({
+                        'name': company_name,
+                        'symbol': symbol,
+                        'score': score,
+                        'industry': industry,
+                        'return_pct': result['return_pct'],
+                        'start_price': result['start_price'],
+                        'end_price': result['end_price']
+                    })
+
+        # Group by sector and score range
+        sector_score_results = {}
+
+        # Score ranges
+        score_ranges = [
+            (9.0, 10.0, "9.0-10.0"),
+            (8.0, 8.99, "8.0-8.99"),
+            (7.0, 7.99, "7.0-7.99"),
+        ]
+
+        for stock in all_stocks:
+            industry = stock['industry']
+            score = stock['score']
+
+            # Find which score range this belongs to
+            for min_score, max_score, score_label in score_ranges:
+                if min_score <= score <= max_score:
+                    key = f"{industry} ({score_label})"
+
+                    if key not in sector_score_results:
+                        sector_score_results[key] = {
+                            'industry': industry,
+                            'score_range': score_label,
+                            'stocks': [],
+                            'returns': []
+                        }
+
+                    sector_score_results[key]['stocks'].append(stock)
+                    sector_score_results[key]['returns'].append(stock['return_pct'])
+                    break
+
+        # Calculate summary statistics for each sector+score combo
+        for key, data in sector_score_results.items():
+            returns = data['returns']
+            if returns:
+                data['avg_return'] = sum(returns) / len(returns)
+                data['best_return'] = max(returns)
+                data['worst_return'] = min(returns)
+                data['num_stocks'] = len(returns)
+
+        # Filter out groups with less than 2 stocks (not meaningful)
+        sector_score_results = {k: v for k, v in sector_score_results.items() if v['num_stocks'] >= 2}
+
+        return sector_score_results
 
     def generate_report(self):
         """Generate a comprehensive backtest report"""
