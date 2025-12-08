@@ -5,16 +5,8 @@ import pandas as pd
 from anthropic import Anthropic
 import plotly.express as px
 import plotly.graph_objects as go
-# Import streamlit first so set_page_config can be the first command
 import streamlit as st
-import yfinance
-
-# Must be the first streamlit command
-st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
-
-# Use pandas_datareader instead of yfinance
-import pandas_datareader.data as web
-from datetime import datetime, timedelta
+import yfinance as yf
 
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
@@ -56,38 +48,36 @@ class InvestmentChatbot:
 
     def get_response(self, query, data):
         context = self.prepare_context(data, query)
-        
+
         # Include previous conversation context
-        # Increased from 5 to 15 messages for better conversation memory
         messages = []
         if 'messages' in st.session_state:
-            # Get last 15 messages for context
-            recent_messages = st.session_state.messages[-15:]
+            # Get last 5 messages for context (adjust number as needed)
+            recent_messages = st.session_state.messages[-5:]
             for msg in recent_messages:
                 messages.append({
                     "role": msg["role"],
                     "content": msg["content"]
                 })
-        
+
         # Add current query
         messages.append({
             "role": "user",
             "content": query
         })
-        
+
         try:
-            response = anthropic.messages.create(
-                model="claude-3-7-sonnet-20250219",  # Updated to Claude 3.7 Sonnet
+            # Use streaming for real-time response
+            with anthropic.messages.stream(
+                model="claude-3-5-sonnet-latest",
                 system=f"{self.system_prompt}\n\nRelevant Data:\n{context}",
-                max_tokens=2048,  # Increased token limit for more detailed responses
+                max_tokens=1024,
                 messages=messages
-            )
-            
-            # Handle the response properly
-            return self.extract_response_content(response)
+            ) as stream:
+                return stream
         except Exception as e:
             st.error(f"Error getting response: {str(e)}")
-            return "I apologize, but I encountered an error. Could you please rephrase your question?"
+            return None
 
     def extract_response_content(self, response):
         """Extract the text content from the response object"""
@@ -132,8 +122,35 @@ def add_chatbot_interface(data):
             for symbol in details['symbols'].split(','):
                 symbol_to_company[symbol.strip()] = company_name
     
+    # Function to create company links and buttons
+    def add_company_links(text):
+        import re
+        # Pattern to match stock symbols in parentheses: (XXXX)
+        pattern = r'\(([A-Z]{1,5})\)'
+        
+        def replace_with_links(match):
+            symbol = match.group(1)
+            company_name = symbol_to_company.get(symbol)
+            
+            # Create columns for the buttons
+            col1, col2 = st.columns(2)
+            
+            # Internal company analysis link
+            if company_name:
+                with col1:
+                    if st.button(f"📊 View {company_name} Analysis", key=f"company_{symbol}"):
+                        navigate_to_company(company_name)
+            
+            # External Yahoo Finance link
+            with col2:
+                if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"yahoo_{symbol}"):
+                    st.write(f"[🔗 Yahoo Finance ({symbol})](https://finance.yahoo.com/quote/{symbol})")
+
+            
+            return f"**{symbol}**"  # Keep the symbol visible in the text
+    
     # Display chat history
-    for message_idx, message in enumerate(st.session_state.messages):
+    for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             if message["role"] == "assistant":
                 # First display the text with bold symbols
@@ -149,20 +166,17 @@ def add_chatbot_interface(data):
                 symbols = re.findall(r'\(([A-Z]{1,5})\)', content)
                 if symbols:
                     st.write("Quick Links:")
-                    for symbol_idx, symbol in enumerate(symbols):
+                    for symbol in symbols:
                         company_name = symbol_to_company.get(symbol)
                         col1, col2 = st.columns(2)
                         
-                        # Create unique keys using message index, symbol, and position
                         if company_name:
                             with col1:
-                                if st.button(f"📊 View {company_name} Analysis", 
-                                           key=f"hist_company_{symbol}_{message_idx}_{symbol_idx}"):
+                                if st.button(f"📊 View {company_name} Analysis", key=f"hist_company_{symbol}_{len(st.session_state.messages)}"):
                                     navigate_to_company(company_name)
                         
                         with col2:
-                            if st.button(f"🔗 Yahoo Finance ({symbol})", 
-                                       key=f"hist_yahoo_{symbol}_{message_idx}_{symbol_idx}"):
+                            if st.button(f"🔗 Yahoo Finance ({symbol})", key=f"hist_yahoo_{symbol}_{len(st.session_state.messages)}"):
                                 st.markdown(f"<script>window.open('https://finance.yahoo.com/quote/{symbol}', '_blank');</script>", unsafe_allow_html=True)
                         
             else:
@@ -179,27 +193,22 @@ def add_chatbot_interface(data):
         
         # Get and display assistant response
         with st.chat_message("assistant"):
-            response = chatbot.get_response(prompt, data)
-            
-            # Handle response formatting
-            if isinstance(response, list):
-                response_parts = []
-                for item in response:
-                    if hasattr(item, 'text'):
-                        response_parts.append(item.text)
-                    elif isinstance(item, dict) and 'text' in item:
-                        response_parts.append(item['text'])
-                    else:
-                        response_parts.append(str(item))
-                response = ' '.join(response_parts)
-            elif hasattr(response, 'text'):
-                response = response.text
-            elif isinstance(response, dict) and 'text' in response:
-                response = response['text']
-            
-            # Display formatted response with links
-            linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
-            st.markdown(linked_response)
+            stream = chatbot.get_response(prompt, data)
+
+            if stream is None:
+                response = "I apologize, but I encountered an error. Could you please rephrase your question?"
+                st.markdown(response)
+            else:
+                # Create placeholder for streaming response
+                response_placeholder = st.empty()
+                response = ""
+
+                # Stream the response token by token
+                for text in stream.text_stream:
+                    response += text
+                    # Update the display with bold symbols
+                    linked_response = re.sub(r'\(([A-Z]{1,5})\)', r'**(\1)**', response)
+                    response_placeholder.markdown(linked_response)
             
             # Extract symbols from the response
             symbols = re.findall(r'\(([A-Z]{1,5})\)', response)
@@ -216,8 +225,8 @@ def add_chatbot_interface(data):
             if unique_matches:
                 st.write("Quick Links:")
 
-                # Iterate over unique matches with an index for unique keys
-                for match_idx, match in enumerate(unique_matches):
+                # Iterate over unique matches
+                for match in unique_matches:
                     # Determine if the match is a symbol or a company name
                     if match in symbol_to_company:
                         # It's a stock symbol, get the corresponding company name
@@ -234,17 +243,15 @@ def add_chatbot_interface(data):
                         # Create buttons for both company analysis and Yahoo Finance
                         col1, col2 = st.columns(2)
 
-                        # Generate a unique key using response index, symbol, and position
-                        response_idx = len(st.session_state.messages)
-                        
                         with col1:
-                            if st.button(f"📊 View {company_name} Analysis", 
-                                       key=f"resp_company_{symbol}_{response_idx}_{match_idx}"):
+                            if st.button(f"📊 View {company_name} Analysis", key=f"resp_company_{symbol}"):
                                 navigate_to_company(company_name)
 
                         with col2:
                             yahoo_link = f"https://finance.yahoo.com/quote/{symbol}"
                             st.markdown(f"[🔗 Yahoo Finance ({symbol})]({yahoo_link})", unsafe_allow_html=True)
+
+
             
             # Add a divider for clarity
             st.divider()
@@ -318,10 +325,6 @@ def navigate_to_company(company_name):
 def navigate_to_sector(sector_name):
     st.session_state.selected_sector = sector_name
     st.session_state.active_tab = "Sector Trends"
-    st.rerun()
-
-def navigate_to_backtest():
-    st.session_state.active_tab = "Backtest"
     st.rerun()
 
 def show_overview(data):
@@ -402,9 +405,88 @@ def show_company_analysis(data, sp500_companies):
 def display_company_info(company_data, company_name, full_data):
     st.subheader(f"{company_name} Analysis")
 
-    # Get earnings info using Stooq
+    # Get earnings info using yfinance
     symbol = company_data.get('symbols', '').split(',')[0].strip()
+    earnings_info = {'next': None, 'last': None}
+
+    if symbol:
+        try:
+            stock = yf.Ticker(symbol)
+            
+            # Get earnings information using proper type checking
+            try:
+                # First try to get calendar info for next earnings
+                calendar = stock.calendar
+                if calendar is not None:
+                    if isinstance(calendar, dict):
+                        # Handle dictionary format
+                        if 'Earnings Date' in calendar:
+                            next_earnings = calendar['Earnings Date']
+                            if isinstance(next_earnings, (list, tuple)) and len(next_earnings) > 0:
+                                earnings_info['next'] = pd.Timestamp(next_earnings[0]).strftime('%Y-%m-%d')
+                    else:
+                        # Handle DataFrame format
+                        try:
+                            next_earnings = calendar.loc['Earnings Date', 0]
+                            if pd.notna(next_earnings):
+                                earnings_info['next'] = pd.Timestamp(next_earnings).strftime('%Y-%m-%d')
+                        except:
+                            pass
+
+                # Get historical earnings dates
+                earnings_dates = stock.earnings_dates
+                if earnings_dates is not None:
+                    if isinstance(earnings_dates, pd.DataFrame) and not earnings_dates.empty:
+                        today = pd.Timestamp.now()
+                        past_dates = earnings_dates[earnings_dates.index < today]
+                        if not past_dates.empty:
+                            last_earnings_date = past_dates.index.max()
+                            earnings_info['last'] = pd.Timestamp(last_earnings_date).strftime('%Y-%m-%d')
+                    elif isinstance(earnings_dates, dict):
+                        # Handle dictionary format
+                        dates = sorted([pd.Timestamp(date) for date in earnings_dates.keys()])
+                        if dates:
+                            earnings_info['last'] = dates[-1].strftime('%Y-%m-%d')
+
+                # If we still don't have last earnings, try quarterly earnings
+                if not earnings_info['last']:
+                    quarterly = stock.quarterly_earnings
+                    if quarterly is not None:
+                        if isinstance(quarterly, pd.DataFrame) and not quarterly.empty:
+                            last_date = quarterly.index.max()
+                            earnings_info['last'] = pd.Timestamp(last_date).strftime('%Y-%m-%d')
+                        elif isinstance(quarterly, dict) and quarterly:
+                            dates = sorted([pd.Timestamp(date) for date in quarterly.keys()])
+                            if dates:
+                                earnings_info['last'] = dates[-1].strftime('%Y-%m-%d')
+                        
+            except Exception as e:
+                print(f"Error fetching earnings data for {symbol}: {str(e)}")
+
+        except Exception as e:
+            print(f"Error accessing data for {symbol}: {str(e)}")
+
+    # Display earnings information
+    st.write("---")
+    st.write("**📅 Earnings Information**")
+
+    col1, col2 = st.columns(2)
     
+    with col1:
+        # Display next earnings date(s)
+        if earnings_info.get('next'):
+            st.write(f"**Next Earnings:** {earnings_info['next']}")
+        else:
+            st.write("**Next Earnings:** Date not announced")
+
+    with col2:
+        # Display last earnings date
+        if earnings_info.get('last'):
+            st.write(f"**Last Reported:** {earnings_info['last']}")
+        else:
+            st.write("**Last Reported:** No data available")
+
+    # Rest of your display code remains the same...
     # Company details
     col1, col2 = st.columns(2)
 
@@ -456,28 +538,13 @@ def display_company_info(company_data, company_name, full_data):
     st.subheader("Stock Price Tracking")
     if symbol:
         try:
-            # Try to get data from Stooq using pandas-datareader
-            start_date = datetime.now() - timedelta(days=180)  # 6 months of data
-            end_date = datetime.now()
-            
-            # Use 'stooq' as the data source
-            price_data = web.DataReader(symbol, 'stooq', start=start_date, end=end_date)
-            
-            if isinstance(price_data, pd.DataFrame) and not price_data.empty and len(price_data) > 1:
-                # Stooq data is typically in reverse chronological order, so sort it
-                price_data = price_data.sort_index()
+            price_data = stock.history(period='6mo')
+            if isinstance(price_data, pd.DataFrame) and not price_data.empty:
                 st.line_chart(price_data['Close'])
             else:
                 st.warning("No price data available for this period")
-                
         except Exception as e:
-            st.error(f"Error fetching price data: {str(e)}")
-            # Provide more specific error handling based on the error type
-            if "ConnectTimeout" in str(e):
-                st.info("Connection to the data source timed out. This might be due to network issues or the data source being temporarily unavailable.")
-            else:
-                st.info("Unable to retrieve price data. Try checking the symbol format (some data sources require specific formats like AAPL.US instead of just AAPL).")
-
+            print(f"Error fetching price data: {str(e)}")
 
 def show_sector_trends(data):
     st.header("Market Trends")
@@ -509,452 +576,6 @@ def show_sector_trends(data):
             if st.button(f"📊 View {company} Analysis", key=f"sector_company_{company}"):
                 navigate_to_company(company)
 
-# def show_backtest(data):
-#     st.header("Investment Strategy Backtest")
-    
-#     # Create a DataFrame from the company analysis data
-#     df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
-#     df['company'] = df.index
-    
-#     # Get company symbols
-#     symbols = []
-#     for company in df['company']:
-#         symbol = data['company_analysis'][company].get('symbols', '').split(',')[0].strip()
-#         symbols.append(symbol if symbol else None)
-#     df['symbol'] = symbols
-    
-#     # Remove companies without symbols
-#     df = df[df['symbol'].notna()]
-    
-#     # Parameters for backtesting
-#     st.subheader("Backtest Parameters")
-    
-#     col1, col2 = st.columns(2)
-#     with col1:
-#         start_date = st.date_input("Start Date", datetime(2024, 11, 1))
-#         # Convert date to datetime for consistent handling
-#         start_datetime = datetime.combine(start_date, datetime.min.time())
-#     with col2:
-#         end_date = st.date_input("End Date", datetime(2025, 2, 1))
-#         # Convert date to datetime for consistent handling
-#         end_datetime = datetime.combine(end_date, datetime.min.time())
-    
-#     # Validate date range
-#     if start_datetime >= end_datetime:
-#         st.error("Error: End date must be after start date")
-#         return
-    
-#     # Select strategy based on ultimate strength
-#     st.subheader("Select Investment Strategy")
-    
-#     min_score = st.slider("Minimum Ultimate Strength Score", 
-#                          min_value=float(df['ultimate_strength'].min()), 
-#                          max_value=float(df['ultimate_strength'].max()),
-#                          value=7.0)
-    
-#     # Filter companies based on selected strategy
-#     selected_companies = df[df['ultimate_strength'] >= min_score]
-    
-#     if st.button("Run Backtest"):
-#         if not selected_companies.empty:
-#             with st.spinner("Running backtest..."):
-#                 try:
-#                     # Import yfinance
-#                     import yfinance as yf
-                    
-#                     # Get S&P 500 data for the same period
-#                     sp500 = yf.download('^GSPC', start=start_datetime, end=end_datetime)
-                    
-#                     if sp500.empty:
-#                         st.error("Could not retrieve S&P 500 data for the selected period")
-#                         return
-                    
-#                     # Calculate S&P 500 return for the period
-#                     sp500_start = sp500['Close'].iloc[0]
-#                     sp500_end = sp500['Close'].iloc[-1]
-#                     sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
-                    
-#                     # Create a status container
-#                     status_container = st.status("Calculating portfolio performance...")
-                    
-#                     # Calculate returns for selected companies
-#                     company_returns = []
-#                     skipped_companies = []
-                    
-#                     for idx, row in selected_companies.iterrows():
-#                         if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
-#                             skipped_companies.append(f"{row['company']} (No symbol available)")
-#                             continue
-                            
-#                         # Update status message
-#                         status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
-                        
-#                         try:
-#                             # Get historical data for this stock
-#                             stock_data = yf.download(row['symbol'], start=start_datetime, end=end_datetime)
-                            
-#                             if not stock_data.empty and len(stock_data) > 1:
-#                                 # Calculate return
-#                                 start_price = stock_data['Close'].iloc[0]
-#                                 end_price = stock_data['Close'].iloc[-1]
-#                                 ret_pct = ((end_price - start_price) / start_price) * 100
-                                
-#                                 company_returns.append({
-#                                     'company': row['company'],
-#                                     'symbol': row['symbol'],
-#                                     'return_pct': ret_pct,
-#                                     'start_price': start_price,
-#                                     'end_price': end_price,
-#                                     'strength': row['ultimate_strength']
-#                                 })
-#                             else:
-#                                 skipped_companies.append(f"{row['company']} (No data available)")
-#                         except Exception as e:
-#                             skipped_companies.append(f"{row['company']} (Error: {str(e)})")
-                    
-#                     # Update final status
-#                     status_container.update(label="Backtest calculation complete!", state="complete")
-                    
-#                     # Display results
-#                     if company_returns:
-#                         returns_df = pd.DataFrame(company_returns)
-#                         portfolio_return = returns_df['return_pct'].mean()
-                        
-#                         # Show summary
-#                         st.subheader(f"Backtest Results ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})")
-                        
-#                         col1, col2, col3 = st.columns(3)
-#                         col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
-#                         col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
-#                         diff = portfolio_return - sp500_return
-#                         arrow = "↑" if diff > 0 else "↓"
-#                         col3.metric("Outperformance", f"{diff:.2f}%", 
-#                                    f"{arrow} {abs(diff):.2f}%")
-                        
-#                         # Plot returns
-#                         fig = px.bar(returns_df, x='company', y='return_pct', 
-#                                     title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
-#                                     labels={'return_pct': 'Return (%)', 'company': 'Company'})
-#                         fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
-#                                      annotation_text=f"S&P 500 Return")
-#                         fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
-#                                      annotation_text="Portfolio Average Return")
-#                         st.plotly_chart(fig)
-                        
-#                         # Show detailed company results
-#                         st.subheader("Detailed Results")
-#                         returns_df = returns_df.sort_values(by='return_pct', ascending=False)
-#                         st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
-                        
-#                         # Show correlation between strength and returns
-#                         st.subheader("Strength vs. Returns Correlation")
-#                         corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
-#                                              hover_data=['company', 'symbol'],
-#                                              title="Ultimate Strength Score vs. Returns",
-#                                              labels={'strength': 'Ultimate Strength Score', 
-#                                                      'return_pct': 'Return (%)'})
-#                         # Add trendline
-#                         corr_fig.update_traces(marker=dict(size=10))
-#                         corr_fig.add_traces(
-#                             px.scatter(returns_df, x='strength', y='return_pct', trendline='ols').data[1]
-#                         )
-#                         st.plotly_chart(corr_fig)
-                        
-#                         # Calculate correlation coefficient
-#                         correlation = returns_df['strength'].corr(returns_df['return_pct'])
-#                         st.write(f"**Correlation coefficient:** {correlation:.3f} (higher values indicate stronger relationship between strength scores and returns)")
-                        
-#                         # Display skipped companies
-#                         if skipped_companies:
-#                             st.subheader("Skipped Companies")
-#                             for company in skipped_companies:
-#                                 st.write(f"- {company}")
-#                     else:
-#                         st.warning("No return data available for the selected companies.")
-#                 except Exception as e:
-#                     st.error(f"Error during backtest: {str(e)}")
-#         else:
-#             st.warning("No companies match the selected criteria.")
-    
-    # st.info("""
-    # **How the Backtest Works**:
-    
-    # 1. Select a start date and an end date for your test period
-    # 2. Choose a minimum Ultimate Strength Score to filter companies
-    # 3. The backtest invests equally in all companies with scores above your threshold
-    # 4. Performance is calculated using actual historical market data from Yahoo Finance
-    # 5. Returns are compared against the S&P 500 benchmark for the same period
-    
-    # This backtest uses real market data to verify if your Ultimate Strength scores are predictive of stock performance.
-    # """)
-    
-    # # Information about the methodology
-    # with st.expander("ℹ️ About Backtest Methodology"):
-    #     st.markdown("""
-    #     This backtest uses real historical market data to:
-        
-    #     * Test if the Ultimate Strength score is predictive of actual stock performance
-    #     * Compare your portfolio selection against the S&P 500 benchmark
-    #     * Analyze the correlation between strength scores and actual returns
-    #     * Visualize performance across your selected time period
-        
-    #     The correlation coefficient helps you evaluate the predictive power of the Ultimate Strength score.
-    #     Higher correlation values indicate that stocks with higher scores tend to perform better in reality.
-    #     """)
-def show_backtest(data):
-    st.header("Investment Strategy Backtest")
-    
-    # Create a DataFrame from the company analysis data
-    df = pd.DataFrame.from_dict(data['company_analysis'], orient='index')
-    df['company'] = df.index
-    
-    # Get company symbols
-    symbols = []
-    for company in df['company']:
-        symbol = data['company_analysis'][company].get('symbols', '').split(',')[0].strip()
-        symbols.append(symbol if symbol else None)
-    df['symbol'] = symbols
-    
-    # Remove companies without symbols
-    df = df[df['symbol'].notna()]
-    
-    # Parameters for backtesting
-    st.subheader("Backtest Parameters")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input("Start Date", datetime(2024, 11, 1))
-        # Convert date to datetime for consistent handling
-        start_datetime = datetime.combine(start_date, datetime.min.time())
-    with col2:
-        end_date = st.date_input("End Date", datetime(2025, 2, 1))
-        # Convert date to datetime for consistent handling
-        end_datetime = datetime.combine(end_date, datetime.min.time())
-    
-    # Validate date range
-    if start_datetime >= end_datetime:
-        st.error("Error: End date must be after start date")
-        return
-    
-    # Select strategy based on ultimate strength
-    st.subheader("Select Investment Strategy")
-    
-    min_score = st.slider("Minimum Ultimate Strength Score", 
-                         min_value=float(df['ultimate_strength'].min()), 
-                         max_value=float(df['ultimate_strength'].max()),
-                         value=7.0)
-    
-    # Filter companies based on selected strategy
-    selected_companies = df[df['ultimate_strength'] >= min_score]
-    
-    if st.button("Run Backtest"):
-        if not selected_companies.empty:
-            with st.spinner("Running backtest..."):
-                try:
-                    # Import yfinance
-                    import yfinance as yf
-                    import time
-                    
-                    # Set a custom user agent to avoid rate limiting
-                    yf._USERAGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-                    
-                    # Helper function to get data with retries
-                    def get_stock_data(symbol, start_date, end_date, max_retries=3, delay=5):
-                        for attempt in range(max_retries):
-                            try:
-                                return yf.download(symbol, start=start_date, end=end_date, progress=False)
-                            except Exception as e:
-                                if "Rate limited" in str(e) and attempt < max_retries - 1:
-                                    time.sleep(delay)
-                                    delay *= 2  # Exponential backoff
-                                else:
-                                    return None
-                    
-                    # Get S&P 500 data with retries
-                    sp500 = get_stock_data('^GSPC', start_datetime, end_datetime)
-                    
-                    if sp500 is None or sp500.empty:
-                        st.error("Could not retrieve S&P 500 data. Yahoo Finance may be rate limiting requests. Please try again in a few minutes.")
-                        return
-                    
-                    # Calculate S&P 500 return for the period
-                    sp500_start = sp500['Close'].iloc[0]
-                    sp500_end = sp500['Close'].iloc[-1]
-                    sp500_return = ((sp500_end - sp500_start) / sp500_start) * 100
-                    
-                    # Create a status container
-                    status_container = st.status("Calculating portfolio performance...")
-                    
-                    # Calculate returns for selected companies
-                    company_returns = []
-                    skipped_companies = []
-                    
-                    # Collect all symbols
-                    all_symbols = selected_companies['symbol'].tolist()
-                    
-                    # Try batch download first (more efficient, less likely to hit rate limits)
-                    try:
-                        status_container.update(label="Downloading data for all stocks...")
-                        all_data = yf.download(all_symbols, start=start_datetime, end=end_datetime, progress=False, group_by='ticker')
-                        batch_download_success = True
-                    except Exception as e:
-                        batch_download_success = False
-                        status_container.update(label="Batch download failed, trying individual downloads...")
-                    
-                    if batch_download_success:
-                        # Process batch data
-                        for idx, row in selected_companies.iterrows():
-                            symbol = row['symbol']
-                            try:
-                                # Get data for this specific symbol
-                                if symbol in all_data.columns.levels[0]:
-                                    stock_data = all_data[symbol]
-                                    if not stock_data.empty and len(stock_data) > 1:
-                                        # Calculate return
-                                        start_price = stock_data['Close'].iloc[0]
-                                        end_price = stock_data['Close'].iloc[-1]
-                                        ret_pct = ((end_price - start_price) / start_price) * 100
-                                        
-                                        company_returns.append({
-                                            'company': row['company'],
-                                            'symbol': symbol,
-                                            'return_pct': ret_pct,
-                                            'start_price': start_price,
-                                            'end_price': end_price,
-                                            'strength': row['ultimate_strength']
-                                        })
-                                    else:
-                                        skipped_companies.append(f"{row['company']} (No data available)")
-                                else:
-                                    skipped_companies.append(f"{row['company']} (No data available)")
-                            except Exception as e:
-                                skipped_companies.append(f"{row['company']} (Error: {str(e)})")
-                    else:
-                        # Fall back to individual downloads
-                        for idx, row in selected_companies.iterrows():
-                            if not row['symbol'] or pd.isna(row['symbol']) or row['symbol'] == '':
-                                skipped_companies.append(f"{row['company']} (No symbol available)")
-                                continue
-                                
-                            # Update status message
-                            status_container.update(label=f"Processing {row['company']} ({row['symbol']})...")
-                            
-                            try:
-                                # Get historical data for this stock with delay to avoid rate limiting
-                                stock_data = get_stock_data(row['symbol'], start_datetime, end_datetime)
-                                
-                                if stock_data is not None and not stock_data.empty and len(stock_data) > 1:
-                                    # Calculate return
-                                    start_price = stock_data['Close'].iloc[0]
-                                    end_price = stock_data['Close'].iloc[-1]
-                                    ret_pct = ((end_price - start_price) / start_price) * 100
-                                    
-                                    company_returns.append({
-                                        'company': row['company'],
-                                        'symbol': row['symbol'],
-                                        'return_pct': ret_pct,
-                                        'start_price': start_price,
-                                        'end_price': end_price,
-                                        'strength': row['ultimate_strength']
-                                    })
-                                else:
-                                    skipped_companies.append(f"{row['company']} (No data available)")
-                                
-                                # Add a small delay between requests
-                                time.sleep(1)
-                            except Exception as e:
-                                skipped_companies.append(f"{row['company']} (Error: {str(e)})")
-                    
-                    # Update final status
-                    status_container.update(label="Backtest calculation complete!", state="complete")
-                    
-                    # Rest of your code remains the same...
-                    # Display results
-                    if company_returns:
-                        returns_df = pd.DataFrame(company_returns)
-                        portfolio_return = returns_df['return_pct'].mean()
-                        
-                        # Show summary
-                        st.subheader(f"Backtest Results ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Portfolio Return", f"{portfolio_return:.2f}%")
-                        col2.metric("S&P 500 Return", f"{sp500_return:.2f}%")
-                        diff = portfolio_return - sp500_return
-                        arrow = "↑" if diff > 0 else "↓"
-                        col3.metric("Outperformance", f"{diff:.2f}%", 
-                                   f"{arrow} {abs(diff):.2f}%")
-                        
-                        # Plot returns
-                        fig = px.bar(returns_df, x='company', y='return_pct', 
-                                    title=f"Individual Company Returns ({start_date.strftime('%b %d, %Y')} - {end_date.strftime('%b %d, %Y')})",
-                                    labels={'return_pct': 'Return (%)', 'company': 'Company'})
-                        fig.add_hline(y=sp500_return, line_dash="dash", line_color="red", 
-                                     annotation_text=f"S&P 500 Return")
-                        fig.add_hline(y=portfolio_return, line_dash="dash", line_color="green", 
-                                     annotation_text="Portfolio Average Return")
-                        st.plotly_chart(fig)
-                        
-                        # Show detailed company results
-                        st.subheader("Detailed Results")
-                        returns_df = returns_df.sort_values(by='return_pct', ascending=False)
-                        st.dataframe(returns_df[['company', 'symbol', 'return_pct', 'start_price', 'end_price', 'strength']])
-                        
-                        # Show correlation between strength and returns
-                        st.subheader("Strength vs. Returns Correlation")
-                        corr_fig = px.scatter(returns_df, x='strength', y='return_pct',
-                                             hover_data=['company', 'symbol'],
-                                             title="Ultimate Strength Score vs. Returns",
-                                             labels={'strength': 'Ultimate Strength Score', 
-                                                     'return_pct': 'Return (%)'})
-                        # Add trendline
-                        corr_fig.update_traces(marker=dict(size=10))
-                        corr_fig.add_traces(
-                            px.scatter(returns_df, x='strength', y='return_pct', trendline='ols').data[1]
-                        )
-                        st.plotly_chart(corr_fig)
-                        
-                        # Calculate correlation coefficient
-                        correlation = returns_df['strength'].corr(returns_df['return_pct'])
-                        st.write(f"**Correlation coefficient:** {correlation:.3f} (higher values indicate stronger relationship between strength scores and returns)")
-                        
-                        # Display skipped companies
-                        if skipped_companies:
-                            st.subheader("Skipped Companies")
-                            for company in skipped_companies:
-                                st.write(f"- {company}")
-                    else:
-                        st.warning("No return data available for the selected companies.")
-                except Exception as e:
-                    st.error(f"Error during backtest: {str(e)}")
-        else:
-            st.warning("No companies match the selected criteria.")
-    st.info("""
-    **How the Backtest Works**:
-    
-    1. Select a start date and an end date for your test period
-    2. Choose a minimum Ultimate Strength Score to filter companies
-    3. The backtest invests equally in all companies with scores above your threshold
-    4. Performance is calculated using actual historical market data from Yahoo Finance
-    5. Returns are compared against the S&P 500 benchmark for the same period
-    
-    This backtest uses real market data to verify if your Ultimate Strength scores are predictive of stock performance.
-    """)
-    
-    # Information about the methodology
-    with st.expander("ℹ️ About Backtest Methodology"):
-        st.markdown("""
-        This backtest uses real historical market data to:
-        
-        * Test if the Ultimate Strength score is predictive of actual stock performance
-        * Compare your portfolio selection against the S&P 500 benchmark
-        * Analyze the correlation between strength scores and actual returns
-        * Visualize performance across your selected time period
-        
-        The correlation coefficient helps you evaluate the predictive power of the Ultimate Strength score.
-        Higher correlation values indicate that stocks with higher scores tend to perform better in reality.
-        """)
-
 def suggest_company():
     st.header("Suggest a Company for Analysis")
     suggested_company = st.text_input("Enter the name or symbol of a company that you think should be analyzed")
@@ -963,10 +584,7 @@ def suggest_company():
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
 def main():
-    # st.set_page_config is moved to the top of the file
-    
-    # Add disclaimer banner
-    st.warning("⚠️ **DISCLAIMER:** This application is for educational purposes only. The investment analysis and recommendations provided should not be construed as financial advice. Always consult with a qualified financial advisor before making investment decisions.")
+    st.set_page_config(layout="wide", page_title="Investment Analysis AI Assistant")
     
     # Initialize session states
     if 'selected_company' not in st.session_state:
@@ -990,7 +608,6 @@ def main():
         "Overview": "📊 Market Overview",
         "Company Analysis": "🏢 Company Analysis",
         "Sector Trends": "📈 Sector Trends",
-        "Backtest": "📉 Strategy Backtest", # Added new navigation option
         "Suggest a Company": "💡 Suggest a Company"
     }
     
@@ -1006,7 +623,6 @@ def main():
         - Compare investment opportunities
         - Track market trends and sectors
         - Get real-time stock insights
-        - Backtest investment strategies
         
         Simply ask questions in natural language!
         """)
@@ -1015,7 +631,7 @@ def main():
     if st.session_state.active_tab == "Chat":
         # Welcome message for first-time visitors
         if st.session_state.first_visit:
-            # Removed st.snow() effect
+            st.snow()  # Add a fun welcome effect
             col1, col2, col3 = st.columns([1,2,1])
             with col2:
                 st.success("""
@@ -1065,8 +681,6 @@ def main():
         show_company_analysis(data, sp500_companies)
     elif st.session_state.active_tab == "Sector Trends":
         show_sector_trends(data)
-    elif st.session_state.active_tab == "Backtest":
-        show_backtest(data)
     elif st.session_state.active_tab == "Suggest a Company":
         suggest_company()
 
@@ -1075,33 +689,16 @@ def main():
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("**📚 Resources**")
-        
-        if st.button("📖 Investment Basics", key="res_basics"):
-            # Instead of using non-working links, navigate to appropriate sections
-            st.session_state.active_tab = "Overview"
-            st.rerun()
-            
-        if st.button("📊 Market Analysis Guide", key="res_guide"):
-            st.session_state.active_tab = "Sector Trends"
-            st.rerun()
-            
+        st.markdown("- [Investment Basics]()")
+        st.markdown("- [Market Analysis Guide]()")
     with col2:
         st.markdown("**🔗 Quick Links**")
-        
-        if st.button("⭐ Top Companies", key="link_top"):
-            # Navigate to company analysis with default filter
-            st.session_state.active_tab = "Company Analysis"
-            st.rerun()
-            
-        if st.button("🏭 Sector Overview", key="link_sector"):
-            st.session_state.active_tab = "Sector Trends"
-            st.rerun()
-            
+        st.markdown("- [Top Companies]()")
+        st.markdown("- [Sector Overview]()")
     with col3:
         st.markdown("**💡 Tips**")
-        st.markdown("- Ask specific questions about companies")
-        st.markdown("- Compare multiple investment options")
-        st.markdown("- Try the new backtesting feature")
+        st.markdown("- Ask specific questions")
+        st.markdown("- Compare multiple companies")
 
 if __name__ == "__main__":
     main()
