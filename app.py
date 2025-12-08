@@ -589,11 +589,11 @@ def suggest_company():
         st.write(f"Thanks! We'll consider adding '{suggested_company}' to the analysis in the future.")
 
 @st.cache_data(ttl=3600)
-def run_backtest(start_date='2024-10-01'):
+def run_backtest(start_date='2024-10-01', end_date=None):
     """Run portfolio backtest and return results"""
     from backtest_performance import PortfolioBacktest
 
-    backtester = PortfolioBacktest(start_date=start_date)
+    backtester = PortfolioBacktest(start_date=start_date, end_date=end_date)
     data, combined_df = backtester.load_company_data()
 
     # Get NASDAQ benchmark
@@ -627,11 +627,18 @@ def show_backtest_results():
                                    value=pd.to_datetime('2024-10-01'),
                                    max_value=pd.to_datetime('today'))
 
+    with col2:
+        end_date = st.date_input("Analysis End Date",
+                                 value=pd.to_datetime('today'),
+                                 min_value=start_date,
+                                 max_value=pd.to_datetime('today'))
+
     start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
 
     with st.spinner('Running backtest analysis... This may take a minute...'):
         try:
-            results = run_backtest(start_date=start_date_str)
+            results = run_backtest(start_date=start_date_str, end_date=end_date_str)
         except Exception as e:
             st.error(f"Error running backtest: {str(e)}")
             return
