@@ -96,8 +96,28 @@ class PortfolioBacktest:
                 recommendation = details.get('recommendation', '')
 
                 if min_score <= score <= max_score:
-                    # Get symbol for this company
+                    # Get symbol for this company - try multiple matching strategies
                     company_row = combined_df[combined_df['name'].str.lower() == company_name.lower()]
+
+                    # If exact match fails, try removing common suffixes and punctuation
+                    if company_row.empty:
+                        # Normalize: remove Inc, Corp, etc. and punctuation
+                        normalized_name = company_name.lower().replace(',', '').replace('.', '').strip()
+                        for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                            normalized_name = normalized_name.replace(suffix, '')
+                        normalized_name = normalized_name.strip()
+
+                        # Try fuzzy match
+                        for idx, row in combined_df.iterrows():
+                            csv_normalized = row['name'].lower().replace(',', '').replace('.', '').strip()
+                            for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                                csv_normalized = csv_normalized.replace(suffix, '')
+                            csv_normalized = csv_normalized.strip()
+
+                            if normalized_name == csv_normalized:
+                                company_row = combined_df.iloc[[idx]]
+                                break
+
                     if not company_row.empty:
                         symbol = company_row.iloc[0]['symbol']
                         industry = company_row.iloc[0].get('industry', 'Unknown')
@@ -149,6 +169,24 @@ class PortfolioBacktest:
             for company_name, details in data['company_analysis'].items():
                 if details.get('recommendation', '') == rec:
                     company_row = combined_df[combined_df['name'].str.lower() == company_name.lower()]
+
+                    # If exact match fails, try fuzzy matching
+                    if company_row.empty:
+                        normalized_name = company_name.lower().replace(',', '').replace('.', '').strip()
+                        for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                            normalized_name = normalized_name.replace(suffix, '')
+                        normalized_name = normalized_name.strip()
+
+                        for idx, row in combined_df.iterrows():
+                            csv_normalized = row['name'].lower().replace(',', '').replace('.', '').strip()
+                            for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                                csv_normalized = csv_normalized.replace(suffix, '')
+                            csv_normalized = csv_normalized.strip()
+
+                            if normalized_name == csv_normalized:
+                                company_row = combined_df.iloc[[idx]]
+                                break
+
                     if not company_row.empty:
                         symbol = company_row.iloc[0]['symbol']
                         companies.append({
@@ -194,6 +232,23 @@ class PortfolioBacktest:
         for company_name, details in data['company_analysis'].items():
             score = details.get('ultimate_strength', 0)
             company_row = combined_df[combined_df['name'].str.lower() == company_name.lower()]
+
+            # If exact match fails, try fuzzy matching
+            if company_row.empty:
+                normalized_name = company_name.lower().replace(',', '').replace('.', '').strip()
+                for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                    normalized_name = normalized_name.replace(suffix, '')
+                normalized_name = normalized_name.strip()
+
+                for idx, row in combined_df.iterrows():
+                    csv_normalized = row['name'].lower().replace(',', '').replace('.', '').strip()
+                    for suffix in [' inc', ' corp', ' corporation', ' incorporated', ' company', ' co', ' ltd']:
+                        csv_normalized = csv_normalized.replace(suffix, '')
+                    csv_normalized = csv_normalized.strip()
+
+                    if normalized_name == csv_normalized:
+                        company_row = combined_df.iloc[[idx]]
+                        break
 
             if not company_row.empty:
                 symbol = company_row.iloc[0]['symbol']
