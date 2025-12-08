@@ -36,6 +36,25 @@ class PortfolioBacktest:
 
         return data, combined_df
 
+    def clean_symbol(self, symbol):
+        """
+        Clean symbol by taking only the first ticker if multiple are present
+
+        Args:
+            symbol: Symbol string that may contain multiple tickers like "GOOG, GOOGL"
+
+        Returns:
+            str: The first ticker symbol
+        """
+        if not symbol:
+            return symbol
+
+        # If symbol contains comma, take only the first one
+        if ',' in symbol:
+            return symbol.split(',')[0].strip()
+
+        return symbol.strip()
+
     def get_stock_returns(self, symbol, start_date, end_date):
         """
         Calculate the return for a single stock
@@ -119,7 +138,7 @@ class PortfolioBacktest:
                                 break
 
                     if not company_row.empty:
-                        symbol = company_row.iloc[0]['symbol']
+                        symbol = self.clean_symbol(company_row.iloc[0]['symbol'])
                         industry = company_row.iloc[0].get('industry', 'Unknown')
                         companies_in_range.append({
                             'name': company_name,
@@ -188,7 +207,7 @@ class PortfolioBacktest:
                                 break
 
                     if not company_row.empty:
-                        symbol = company_row.iloc[0]['symbol']
+                        symbol = self.clean_symbol(company_row.iloc[0]['symbol'])
                         companies.append({
                             'name': company_name,
                             'symbol': symbol,
@@ -251,7 +270,7 @@ class PortfolioBacktest:
                         break
 
             if not company_row.empty:
-                symbol = company_row.iloc[0]['symbol']
+                symbol = self.clean_symbol(company_row.iloc[0]['symbol'])
                 industry = company_row.iloc[0].get('industry', 'Unknown')
 
                 result = self.get_stock_returns(symbol, self.start_date, self.end_date)
